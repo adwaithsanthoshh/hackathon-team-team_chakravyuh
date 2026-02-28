@@ -86,6 +86,22 @@ app.post('/api/registrations', (req, res) => {
         timestamp
     );
 
+    // Update resource allocation for the camp
+    const campRow = db.prepare('SELECT id FROM camps WHERE name = ?').get(camp);
+    if (campRow && needs && needs.length > 0) {
+        const parsedNeeds = Array.isArray(needs) ? needs : JSON.parse(needs);
+        const updates = [];
+        parsedNeeds.forEach(n => {
+            const upper = n.toUpperCase();
+            if (upper === 'FOOD' || upper.includes('FOOD')) updates.push('food_allocated = food_allocated + 1');
+            if (upper === 'WATER' || upper.includes('WATER')) updates.push('water_allocated = water_allocated + 1');
+            if (upper === 'MEDICINE' || upper.includes('MEDICINE')) updates.push('medicine_allocated = medicine_allocated + 1');
+        });
+        if (updates.length > 0) {
+            db.prepare(`UPDATE camp_resources SET ${updates.join(', ')} WHERE camp_id = ?`).run(campRow.id);
+        }
+    }
+
     res.status(201).json(rowToJson(
         db.prepare('SELECT * FROM registrations WHERE id = ?').get(id)
     ));
@@ -206,6 +222,140 @@ app.delete('/api/registrations', (req, res) => {
     res.json({ deleted: result.changes });
 });
 
+// ============================
+// CAMPS & ADMIN ROUTES
+// ============================
+
+// GET /api/camps — list all camps with team counts
+app.get('/api/camps', (req, res) => {
+    const db = getDb();
+    const rows = db.prepare(`
+        SELECT c.*, cr.food_total, cr.food_allocated, cr.water_total, cr.water_allocated,
+               cr.medicine_total, cr.medicine_allocated
+        FROM camps c
+        LEFT JOIN camp_resources cr ON cr.camp_id = c.id
+        ORDER BY c.name
+    `).all();
+    res.json(rows);
+});
+
+// POST /api/camps — create a new camp
+app.post('/api/camps', (req, res) => {
+    const db = getDb();
+    const { name, medical_team_count, rescue_team_count } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Camp name is required' });
+
+    try {
+        const result = db.prepare('INSERT INTO camps (name, medical_team_count, rescue_team_count) VALUES (?, ?, ?)').run(
+            name.trim(), medical_team_count || 3, rescue_team_count || 3
+        );
+        const campId = result.lastInsertRowid;
+        db.prepare('INSERT INTO camp_resources (camp_id) VALUES (?)').run(campId);
+        const camp = db.prepare(`
+            SELECT c.*, cr.food_total, cr.food_allocated, cr.water_total, cr.water_allocated,
+                   cr.medicine_total, cr.medicine_allocated
+            FROM camps c LEFT JOIN camp_resources cr ON cr.camp_id = c.id WHERE c.id = ?
+        `).get(campId);
+        res.status(201).json(camp);
+    } catch (e) {
+        if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'Camp name already exists' });
+        throw e;
+    }
+});
+
+// PUT /api/camps/:id — update camp settings
+app.put('/api/camps/:id', (req, res) => {
+    const db = getDb();
+    const { id } = req.params;
+    const { medical_team_count, rescue_team_count, food_total, water_total, medicine_total } = req.body;
+
+    const camp = db.prepare('SELECT * FROM camps WHERE id = ?').get(id);
+    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+
+    if (medical_team_count !== undefined || rescue_team_count !== undefined) {
+        db.prepare('UPDATE camps SET medical_team_count = ?, rescue_team_count = ? WHERE id = ?').run(
+            medical_team_count ?? camp.medical_team_count,
+            rescue_team_count ?? camp.rescue_team_count,
+            id
+        );
+    }
+
+    if (food_total !== undefined || water_total !== undefined || medicine_total !== undefined) {
+        const cr = db.prepare('SELECT * FROM camp_resources WHERE camp_id = ?').get(id);
+        db.prepare('UPDATE camp_resources SET food_total = ?, water_total = ?, medicine_total = ? WHERE camp_id = ?').run(
+            food_total ?? cr.food_total,
+            water_total ?? cr.water_total,
+            medicine_total ?? cr.medicine_total,
+            id
+        );
+    }
+
+    const updated = db.prepare(`
+        SELECT c.*, cr.food_total, cr.food_allocated, cr.water_total, cr.water_allocated,
+               cr.medicine_total, cr.medicine_allocated
+        FROM camps c LEFT JOIN camp_resources cr ON cr.camp_id = c.id WHERE c.id = ?
+    `).get(id);
+    res.json(updated);
+});
+
+// GET /api/resources — all camp resources
+app.get('/api/resources', (req, res) => {
+    const db = getDb();
+    const rows = db.prepare(`
+        SELECT c.name as camp_name, c.id as camp_id,
+               cr.food_total, cr.food_allocated, cr.water_total, cr.water_allocated,
+               cr.medicine_total, cr.medicine_allocated
+        FROM camps c
+        LEFT JOIN camp_resources cr ON cr.camp_id = c.id
+        ORDER BY c.name
+    `).all();
+    res.json(rows);
+});
+
+// GET /api/dispatches — all dispatch entries
+app.get('/api/dispatches', (req, res) => {
+    const db = getDb();
+    const rows = db.prepare(`
+        SELECT d.*, c.name as camp_name
+        FROM dispatch_log d
+        LEFT JOIN camps c ON c.id = d.camp_id
+        ORDER BY d.dispatch_time DESC
+    `).all();
+    res.json(rows);
+});
+
+// POST /api/dispatches — create a dispatch entry
+app.post('/api/dispatches', (req, res) => {
+    const db = getDb();
+    const { type, camp_name, team_member_name, dispatch_location, dispatch_reason, reported_by } = req.body;
+
+    if (!type || !camp_name || !dispatch_location || !dispatch_reason) {
+        return res.status(400).json({ error: 'type, camp_name, dispatch_location, dispatch_reason are required' });
+    }
+
+    const camp = db.prepare('SELECT * FROM camps WHERE name = ?').get(camp_name);
+    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+
+    const teamSize = type === 'medical' ? camp.medical_team_count : camp.rescue_team_count;
+    const activeCount = db.prepare(
+        'SELECT COUNT(*) as count FROM dispatch_log WHERE camp_id = ? AND type = ? AND status = ?'
+    ).get(camp.id, type, 'Dispatched').count;
+
+    const status = activeCount < teamSize ? 'Dispatched' : 'Waiting for People';
+    const dispatch_time = new Date().toISOString();
+
+    const result = db.prepare(`
+        INSERT INTO dispatch_log (type, camp_id, team_member_name, dispatch_time, dispatch_location, dispatch_reason, reported_by, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(type, camp.id, team_member_name || '', dispatch_time, dispatch_location, dispatch_reason, reported_by || '', status);
+
+    const entry = db.prepare(`
+        SELECT d.*, c.name as camp_name FROM dispatch_log d
+        LEFT JOIN camps c ON c.id = d.camp_id WHERE d.id = ?
+    `).get(result.lastInsertRowid);
+    res.status(201).json(entry);
+});
+
 // Start server
 app.listen(PORT, () => {
     getDb(); // Initialize DB on startup
@@ -215,5 +365,11 @@ app.listen(PORT, () => {
     console.log(`   POST   /api/registrations`);
     console.log(`   DELETE /api/registrations`);
     console.log(`   GET    /api/stats`);
-    console.log(`   GET    /api/search?name=&village=\n`);
+    console.log(`   GET    /api/search?name=&village=`);
+    console.log(`   GET    /api/camps`);
+    console.log(`   POST   /api/camps`);
+    console.log(`   PUT    /api/camps/:id`);
+    console.log(`   GET    /api/resources`);
+    console.log(`   GET    /api/dispatches`);
+    console.log(`   POST   /api/dispatches\n`);
 });

@@ -3,6 +3,7 @@ import Home from './pages/Home';
 import Kiosk from './pages/Kiosk';
 import Coordinator from './pages/Coordinator';
 import Family from './pages/Family';
+import Admin from './pages/Admin';
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/kiosk" element={<Kiosk />} />
         <Route path="/coordinator" element={<Coordinator />} />
         <Route path="/family" element={<Family />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </BrowserRouter>
   );

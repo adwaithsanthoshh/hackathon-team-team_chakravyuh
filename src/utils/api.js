@@ -39,3 +39,51 @@ export async function searchFamily(name, village = '') {
     if (!res.ok) throw new Error('Failed to search');
     return res.json();
 }
+
+export async function fetchCamps() {
+    const res = await fetch(`${API_BASE}/camps`);
+    if (!res.ok) throw new Error('Failed to fetch camps');
+    return res.json();
+}
+
+export async function createCamp(data) {
+    const res = await fetch(`${API_BASE}/camps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create camp');
+    return res.json();
+}
+
+export async function updateCamp(id, data) {
+    const res = await fetch(`${API_BASE}/camps/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update camp');
+    return res.json();
+}
+
+export async function fetchDispatches() {
+    const res = await fetch(`${API_BASE}/dispatches`);
+    if (!res.ok) throw new Error('Failed to fetch dispatches');
+    return res.json();
+}
+
+export async function createDispatch(data) {
+    const res = await fetch(`${API_BASE}/dispatches`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create dispatch');
+    return res.json();
+}
+
+export async function fetchResources() {
+    const res = await fetch(`${API_BASE}/resources`);
+    if (!res.ok) throw new Error('Failed to fetch resources');
+    return res.json();
+}

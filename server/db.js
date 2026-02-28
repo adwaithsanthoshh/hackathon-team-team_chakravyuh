@@ -34,6 +34,66 @@ function initSchema() {
       timestamp TEXT NOT NULL
     )
   `);
+
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS camps (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      medical_team_count INTEGER DEFAULT 3,
+      rescue_team_count INTEGER DEFAULT 3
+    )
+  `);
+
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS camp_resources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      camp_id INTEGER NOT NULL,
+      food_total INTEGER DEFAULT 100,
+      food_allocated INTEGER DEFAULT 0,
+      water_total INTEGER DEFAULT 100,
+      water_allocated INTEGER DEFAULT 0,
+      medicine_total INTEGER DEFAULT 100,
+      medicine_allocated INTEGER DEFAULT 0,
+      FOREIGN KEY (camp_id) REFERENCES camps(id)
+    )
+  `);
+
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS dispatch_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      camp_id INTEGER NOT NULL,
+      team_member_name TEXT DEFAULT '',
+      dispatch_time TEXT NOT NULL,
+      dispatch_location TEXT NOT NULL,
+      dispatch_reason TEXT NOT NULL,
+      reported_by TEXT DEFAULT '',
+      status TEXT NOT NULL,
+      FOREIGN KEY (camp_id) REFERENCES camps(id)
+    )
+  `);
+
+    // Seed camps if not already present
+    const campCount = db.prepare('SELECT COUNT(*) as count FROM camps').get().count;
+    if (campCount === 0) {
+        const insertCamp = db.prepare('INSERT INTO camps (name) VALUES (?)');
+        const insertResource = db.prepare('INSERT INTO camp_resources (camp_id) VALUES (?)');
+        const defaultCamps = [
+            'Meppadi Relief Camp',
+            'Chooralmala School Camp',
+            'Kalpetta Government Camp',
+            'Mananthavady Town Camp',
+            'Sulthan Bathery Camp',
+        ];
+        const seedCamps = db.transaction(() => {
+            defaultCamps.forEach(name => {
+                const result = insertCamp.run(name);
+                insertResource.run(result.lastInsertRowid);
+            });
+        });
+        seedCamps();
+        console.log('✅ Seeded 5 default camps with resources');
+    }
 }
 
 function generateId() {

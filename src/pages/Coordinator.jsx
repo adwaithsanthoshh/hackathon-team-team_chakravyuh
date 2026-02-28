@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchRegistrations, fetchStats, deleteRegistrations } from '../utils/api';
+import { fetchRegistrations, fetchStats, deleteRegistrations, fetchDispatches, createDispatch, fetchResources } from '../utils/api';
 
 const CAMPS = [
     'Meppadi Relief Camp',
@@ -77,67 +77,67 @@ function CampDetailView({ campName, registrations, onBack }) {
     const entries = registrations.filter(r => r.camp === campName);
 
     return (
-        <div className="min-h-screen bg-navy-900 text-white dark-scrollbar">
-            <div className="bg-navy-800 border-b border-slate-700 px-4 sm:px-6 py-3 flex items-center gap-4">
-                <button onClick={onBack} className="text-orange-400 hover:text-orange-300 font-medium transition-colors text-lg">
+        <div className="min-h-screen bg-hud-black hud-grid text-hud-white hud-scrollbar">
+            <div className="border-b border-hud-500 px-4 sm:px-6 py-3 flex items-center gap-4 bg-hud-900">
+                <button onClick={onBack} className="font-mono text-xs text-hud-300 hover:text-neon-cyan transition-colors tracking-wider uppercase">
                     ← Back
                 </button>
-                <h1 className="text-lg font-bold flex-1">
-                    <span className="text-xl mr-2">🏕️</span>{campName}
+                <h1 className="font-display text-base font-bold flex-1 uppercase tracking-wide flex items-center gap-2">
+                    <span className="text-lg">🏕️</span>{campName}
                 </h1>
-                <span className="text-sm text-slate-400">{entries.length} entries</span>
+                <span className="font-mono text-[10px] text-hud-400 tracking-wider">[{entries.length} ENTRIES]</span>
             </div>
 
             <div className="max-w-4xl mx-auto p-4 sm:p-6">
                 {entries.length === 0 ? (
                     <div className="text-center py-20">
-                        <p className="text-slate-500 text-lg">No registrations in this camp yet</p>
+                        <p className="font-mono text-sm text-hud-400">No registrations in this camp yet</p>
                     </div>
                 ) : (
                     <div className="space-y-3">
                         {entries.map((r, i) => (
-                            <div key={r.id} className={`rounded-xl p-5 border animate-fade-in-up ${r.injured ? 'bg-red-500/10 border-red-500/30' :
-                                    r.trapped ? 'bg-orange-500/10 border-orange-500/30' :
-                                        'bg-white/5 border-slate-700'
+                            <div key={r.id} className={`p-5 border animate-fade-in-up ${r.injured ? 'bg-alert-red-dim border-alert-red/30' :
+                                r.trapped ? 'bg-warn-orange-dim border-warn-orange/30' :
+                                    'bg-hud-900 border-hud-500'
                                 }`} style={{ animationDelay: `${i * 50}ms` }}>
                                 <div className="flex items-start justify-between mb-3">
                                     <div>
-                                        <h3 className="text-lg font-bold text-white">{r.name}</h3>
-                                        <p className="text-sm text-slate-400">ID: {r.id}</p>
+                                        <h3 className="font-display text-base font-bold text-hud-white uppercase">{r.name}</h3>
+                                        <p className="font-mono text-[10px] text-hud-400 tracking-wider">ID: {r.id}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-xs text-slate-500">{formatFullTime(r.timestamp)}</p>
-                                        <p className="text-xs text-slate-500">{timeAgo(r.timestamp)}</p>
+                                        <p className="font-mono text-[10px] text-hud-400">{formatFullTime(r.timestamp)}</p>
+                                        <p className="font-mono text-[10px] text-hud-400">{timeAgo(r.timestamp)}</p>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                                     <div>
-                                        <span className="text-slate-500 text-xs block">Village</span>
-                                        <span className="text-orange-200 font-medium">{r.village || 'N/A'}</span>
+                                        <span className="mono-label block">Village</span>
+                                        <span className="font-mono text-xs text-hud-200 font-medium">{r.village || 'N/A'}</span>
                                     </div>
                                     <div>
-                                        <span className="text-slate-500 text-xs block">Family Members</span>
-                                        <span className="text-orange-200 font-medium">{r.familyCount}</span>
+                                        <span className="mono-label block">Family</span>
+                                        <span className="font-mono text-xs text-hud-200 font-medium">{r.familyCount}</span>
                                     </div>
                                     {r.needs && r.needs.length > 0 && (
                                         <div>
-                                            <span className="text-slate-500 text-xs block">Needs</span>
-                                            <span className="text-amber-400 font-medium">{r.needs.join(', ')}</span>
+                                            <span className="mono-label block">Needs</span>
+                                            <span className="font-mono text-xs text-warn-amber font-medium">{r.needs.join(', ')}</span>
                                         </div>
                                     )}
                                 </div>
 
                                 {r.injured && (
-                                    <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                                        <span className="text-red-400 text-xs font-bold">🚨 INJURY:</span>
-                                        <span className="text-red-300 text-sm ml-2">{r.injuryDescription}</span>
+                                    <div className="mt-3 bg-alert-red-dim border border-alert-red/20 p-3">
+                                        <span className="font-mono text-[10px] text-alert-red font-bold tracking-wider">🚨 INJURY:</span>
+                                        <span className="font-mono text-xs text-alert-red ml-2">{r.injuryDescription}</span>
                                     </div>
                                 )}
                                 {r.trapped && (
-                                    <div className="mt-3 bg-orange-500/10 border border-orange-500/20 rounded-lg p-3">
-                                        <span className="text-orange-400 text-xs font-bold">⚠️ TRAPPED:</span>
-                                        <span className="text-orange-300 text-sm ml-2">{r.trappedDescription}</span>
+                                    <div className="mt-3 bg-warn-orange-dim border border-warn-orange/20 p-3">
+                                        <span className="font-mono text-[10px] text-warn-orange font-bold tracking-wider">⚠️ TRAPPED:</span>
+                                        <span className="font-mono text-xs text-warn-orange ml-2">{r.trappedDescription}</span>
                                     </div>
                                 )}
                             </div>
@@ -177,40 +177,44 @@ function ClearModal({ registrations, onClose, onDeleted }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-navy-800 border border-slate-600 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="p-5 border-b border-slate-700 flex items-center justify-between shrink-0">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2"><span className="text-red-400">🗑️</span> Clear Database</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-hud-900 border border-hud-500 w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="p-5 border-b border-hud-500 flex items-center justify-between shrink-0">
+                    <h2 className="font-display text-lg font-bold text-hud-white uppercase tracking-wide flex items-center gap-2">
+                        <span className="text-alert-red">🗑️</span> Clear Database
+                    </h2>
+                    <button onClick={onClose} className="text-hud-400 hover:text-hud-white text-xl font-mono">×</button>
                 </div>
-                <div className="p-5 border-b border-slate-700 shrink-0">
-                    <label className="block text-sm font-medium text-slate-400 mb-2">Select Camp</label>
+                <div className="p-5 border-b border-hud-500 shrink-0">
+                    <label className="mono-label block mb-2">SELECT_CAMP</label>
                     <select value={selectedCamp} onChange={e => { setSelectedCamp(e.target.value); setSelectedIds(new Set()); }}
-                        className="w-full p-3 bg-navy-900 border border-slate-600 rounded-xl text-white focus:border-red-500 focus:outline-none">
-                        <option value="">— Choose a camp —</option>
+                        className="w-full p-3 hud-input">
+                        <option value="">— CHOOSE A CAMP —</option>
                         {CAMPS.map(c => <option key={c} value={c}>{c} ({registrations.filter(r => r.camp === c).length} entries)</option>)}
                     </select>
                 </div>
-                <div className="flex-1 overflow-y-auto dark-scrollbar p-5">
-                    {!selectedCamp ? <p className="text-slate-500 text-center py-8">Select a camp to view entries</p> :
-                        campEntries.length === 0 ? <p className="text-slate-500 text-center py-8">No entries in this camp</p> : (
+                <div className="flex-1 overflow-y-auto hud-scrollbar p-5">
+                    {!selectedCamp ? <p className="font-mono text-xs text-hud-400 text-center py-8">Select a camp to view entries</p> :
+                        campEntries.length === 0 ? <p className="font-mono text-xs text-hud-400 text-center py-8">No entries in this camp</p> : (
                             <>
-                                <button onClick={toggleAll} className="mb-3 text-sm font-medium text-red-400 hover:text-red-300 transition-colors">
-                                    {selectedIds.size === campEntries.length ? '☑ Deselect All' : '☐ Select All'} ({campEntries.length} entries)
+                                <button onClick={toggleAll} className="mb-3 font-mono text-[10px] font-bold text-alert-red hover:text-alert-red/80 transition-colors tracking-wider uppercase">
+                                    {selectedIds.size === campEntries.length ? '☑ DESELECT ALL' : '☐ SELECT ALL'} ({campEntries.length} entries)
                                 </button>
                                 <div className="space-y-2">
                                     {campEntries.map(r => (
-                                        <label key={r.id} className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedIds.has(r.id) ? 'bg-red-500/15 border border-red-500/30' : 'bg-white/5 border border-transparent hover:bg-white/10'}`}>
+                                        <label key={r.id} className={`flex items-start gap-3 p-3 cursor-pointer transition-colors border ${selectedIds.has(r.id) ? 'bg-alert-red-dim border-alert-red/30' : 'bg-hud-800 border-hud-500 hover:border-hud-400'}`}>
                                             <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleId(r.id)} className="mt-1 w-4 h-4 shrink-0 accent-red-500" />
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-white font-semibold text-sm">{r.name}</span>
-                                                    <span className="text-slate-500 text-xs">•</span>
-                                                    <span className="text-slate-400 text-xs">{r.village}</span>
-                                                    {r.injured && <span className="text-red-400 text-xs font-medium">🚨</span>}
-                                                    {r.trapped && <span className="text-orange-400 text-xs font-medium">⚠️</span>}
+                                                    <span className="font-mono text-xs text-hud-white font-semibold">{r.name}</span>
+                                                    <span className="text-hud-500 text-xs">•</span>
+                                                    <span className="font-mono text-[10px] text-hud-400">{r.village}</span>
+                                                    {r.injured && <span className="text-alert-red text-xs">🚨</span>}
+                                                    {r.trapped && <span className="text-warn-orange text-xs">⚠️</span>}
                                                 </div>
-                                                <div className="text-xs text-slate-500 mt-0.5">ID: {r.id} • Family: {r.familyCount} • {formatFullTime(r.timestamp)}</div>
+                                                <div className="font-mono text-[10px] text-hud-400 mt-0.5">
+                                                    ID: {r.id} • Family: {r.familyCount} • {formatFullTime(r.timestamp)}
+                                                </div>
                                             </div>
                                         </label>
                                     ))}
@@ -218,13 +222,13 @@ function ClearModal({ registrations, onClose, onDeleted }) {
                             </>
                         )}
                 </div>
-                <div className="p-5 border-t border-slate-700 flex items-center justify-between shrink-0">
-                    <span className="text-sm text-slate-400">{selectedIds.size > 0 ? `${selectedIds.size} selected` : 'No entries selected'}</span>
+                <div className="p-5 border-t border-hud-500 flex items-center justify-between shrink-0">
+                    <span className="font-mono text-[10px] text-hud-400 tracking-wider">{selectedIds.size > 0 ? `${selectedIds.size} SELECTED` : 'NO ENTRIES SELECTED'}</span>
                     <div className="flex gap-3">
-                        <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">Cancel</button>
+                        <button onClick={onClose} className="px-5 py-2.5 btn-outline text-xs">CANCEL</button>
                         <button onClick={handleDelete} disabled={selectedIds.size === 0 || deleting}
-                            className="px-5 py-2.5 text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg transition-colors">
-                            {deleting ? 'Deleting...' : `Delete ${selectedIds.size} Entry(s)`}
+                            className="px-5 py-2.5 text-xs font-mono font-bold text-hud-white bg-alert-red hover:bg-alert-red/80 disabled:bg-hud-600 disabled:text-hud-400 border border-alert-red disabled:border-hud-500 transition-colors uppercase tracking-wider">
+                            {deleting ? 'DELETING...' : `DELETE ${selectedIds.size} ENTRY(S)`}
                         </button>
                     </div>
                 </div>
@@ -268,35 +272,41 @@ function ReportModal({ registrations, onClose }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-navy-800 border border-slate-600 rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="p-5 border-b border-slate-700 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2"><span className="text-blue-400">📄</span> Download Report</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-hud-900 border border-hud-500 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                <div className="p-5 border-b border-hud-500 flex items-center justify-between">
+                    <h2 className="font-display text-lg font-bold text-hud-white uppercase tracking-wide flex items-center gap-2">
+                        <span className="text-neon-cyan">📄</span> Download Report
+                    </h2>
+                    <button onClick={onClose} className="text-hud-400 hover:text-hud-white text-xl font-mono">×</button>
                 </div>
                 <div className="p-5">
                     <div className="flex items-center justify-between mb-3">
-                        <label className="text-sm font-medium text-slate-400">Select Camp(s)</label>
-                        <button onClick={toggleAll} className="text-sm font-medium text-orange-400 hover:text-orange-300 transition-colors">
-                            {selectedCamps.size === CAMPS.length ? 'Deselect All' : 'Select All'}
+                        <span className="mono-label">SELECT_CAMPS</span>
+                        <button onClick={toggleAll} className="font-mono text-[10px] font-bold text-neon-cyan hover:text-neon-cyan/80 transition-colors tracking-wider uppercase">
+                            {selectedCamps.size === CAMPS.length ? 'DESELECT ALL' : 'SELECT ALL'}
                         </button>
                     </div>
                     <div className="space-y-2">
                         {CAMPS.map(camp => (
-                            <label key={camp} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedCamps.has(camp) ? 'bg-orange-500/15 border border-orange-500/30' : 'bg-white/5 border border-transparent hover:bg-white/10'}`}>
-                                <input type="checkbox" checked={selectedCamps.has(camp)} onChange={() => toggleCamp(camp)} className="w-4 h-4 accent-orange-500" />
-                                <span className="text-white font-medium text-sm flex-1">{camp}</span>
-                                <span className="text-slate-400 text-xs">{registrations.filter(r => r.camp === camp).length}</span>
+                            <label key={camp} className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border ${selectedCamps.has(camp) ? 'bg-neon-cyan-dim border-neon-cyan/30' : 'bg-hud-800 border-hud-500 hover:border-hud-400'}`}>
+                                <input type="checkbox" checked={selectedCamps.has(camp)} onChange={() => toggleCamp(camp)} className="w-4 h-4 accent-cyan-400" />
+                                <span className="font-mono text-xs text-hud-white font-medium flex-1">{camp}</span>
+                                <span className="font-mono text-[10px] text-hud-400">[{registrations.filter(r => r.camp === camp).length}]</span>
                             </label>
                         ))}
                     </div>
                 </div>
-                <div className="p-5 border-t border-slate-700 flex items-center justify-between">
-                    <span className="text-sm text-slate-400">{selectedCamps.size > 0 ? `${registrations.filter(r => selectedCamps.has(r.camp)).length} entries` : 'No camps selected'}</span>
+                <div className="p-5 border-t border-hud-500 flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-hud-400 tracking-wider">
+                        {selectedCamps.size > 0 ? `${registrations.filter(r => selectedCamps.has(r.camp)).length} ENTRIES` : 'NO CAMPS SELECTED'}
+                    </span>
                     <div className="flex gap-3">
-                        <button onClick={onClose} className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">Cancel</button>
+                        <button onClick={onClose} className="px-5 py-2.5 btn-outline text-xs">CANCEL</button>
                         <button onClick={handleDownload} disabled={selectedCamps.size === 0}
-                            className="px-5 py-2.5 text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 disabled:bg-slate-700 disabled:text-slate-500 rounded-lg transition-colors">📥 Download .txt</button>
+                            className="px-5 py-2.5 btn-primary text-xs">
+                            📥 DOWNLOAD .TXT
+                        </button>
                     </div>
                 </div>
             </div>
@@ -319,52 +329,51 @@ function RescueModal({ report, onClose, onDispatched }) {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-navy-800 border border-slate-600 rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="p-5 border-b border-slate-700">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <span className="text-red-400">🚨</span> Dispatch Rescue Team
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-hud-900 border border-hud-500 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                <div className="p-5 border-b border-hud-500">
+                    <h2 className="font-display text-lg font-bold text-hud-white uppercase tracking-wide flex items-center gap-2">
+                        <span className="text-alert-red">🚨</span> Dispatch Rescue Team
                     </h2>
                 </div>
                 <div className="p-5 space-y-4">
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-2">
+                    <div className="bg-alert-red-dim border border-alert-red/20 p-4 space-y-3">
                         <div className="flex justify-between">
-                            <span className="text-slate-400 text-sm">Reported by</span>
-                            <span className="text-white font-semibold">{report.name}</span>
+                            <span className="mono-label">REPORTED_BY</span>
+                            <span className="font-mono text-xs text-hud-white font-semibold">{report.name}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-slate-400 text-sm">Camp</span>
-                            <span className="text-orange-300 font-medium text-sm">{report.camp}</span>
+                            <span className="mono-label">CAMP</span>
+                            <span className="font-mono text-xs text-neon-cyan font-medium">{report.camp}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-slate-400 text-sm">Village</span>
-                            <span className="text-orange-300 font-medium text-sm">{report.village || 'N/A'}</span>
+                            <span className="mono-label">VILLAGE</span>
+                            <span className="font-mono text-xs text-hud-200 font-medium">{report.village || 'N/A'}</span>
                         </div>
                     </div>
                     <div>
-                        <p className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1">
-                            {report.trapped ? 'Trapped Person Details' : 'Medical Emergency Details'}
-                        </p>
-                        <p className="text-orange-100 bg-white/5 rounded-lg p-3 text-sm leading-relaxed">
+                        <div className="mono-label mb-2">
+                            {report.trapped ? 'TRAPPED_DETAILS' : 'MEDICAL_DETAILS'}
+                        </div>
+                        <p className="font-mono text-xs text-hud-200 bg-hud-800 border border-hud-500 p-3 leading-relaxed">
                             "{report.trapped ? report.trappedDescription : report.injuryDescription}"
                         </p>
                     </div>
 
                     {dispatching && (
                         <div className="text-center py-2 animate-fade-in-up">
-                            <div className="inline-flex items-center gap-2 text-green-400 font-semibold">
-                                <span className="w-2 h-2 bg-green-400 rounded-full animate-status-pulse"></span>
-                                Dispatching rescue team...
+                            <div className="inline-flex items-center gap-2 font-mono text-xs text-status-green font-bold tracking-wider">
+                                <span className="w-2 h-2 bg-status-green animate-status-pulse" />
+                                DISPATCHING RESCUE TEAM...
                             </div>
                         </div>
                     )}
                 </div>
-                <div className="p-5 border-t border-slate-700 flex gap-3 justify-end">
-                    <button onClick={onClose} disabled={dispatching}
-                        className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors">Cancel</button>
+                <div className="p-5 border-t border-hud-500 flex gap-3 justify-end">
+                    <button onClick={onClose} disabled={dispatching} className="px-5 py-2.5 btn-outline text-xs">CANCEL</button>
                     <button onClick={handleDispatch} disabled={dispatching}
-                        className="px-5 py-2.5 text-sm font-bold text-white bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 disabled:from-slate-600 disabled:to-slate-600 rounded-lg transition-all">
-                        {dispatching ? '⏳ Sending...' : '🚁 Send Rescue Team'}
+                        className="px-5 py-2.5 text-xs font-mono font-bold text-hud-white bg-alert-red hover:bg-alert-red/80 disabled:bg-hud-600 disabled:text-hud-400 border border-alert-red disabled:border-hud-500 transition-colors uppercase tracking-wider">
+                        {dispatching ? '⏳ SENDING...' : '🚁 SEND RESCUE TEAM'}
                     </button>
                 </div>
             </div>
@@ -383,12 +392,26 @@ export default function Coordinator() {
     const [selectedCampView, setSelectedCampView] = useState(null);
     const [rescueTarget, setRescueTarget] = useState(null);
     const [dispatchedIds, setDispatchedIds] = useState(new Set());
+    const [dispatches, setDispatches] = useState([]);
+    const [resources, setResources] = useState([]);
+    const [rescueDateFilter, setRescueDateFilter] = useState('ALL_TIME');
+    const [medicalDateFilter, setMedicalDateFilter] = useState('ALL_TIME');
 
     const load = async () => {
         try {
-            const [regs, st] = await Promise.all([fetchRegistrations(), fetchStats()]);
+            const [regs, st, disp, res] = await Promise.all([
+                fetchRegistrations(), fetchStats(), fetchDispatches(), fetchResources()
+            ]);
             setRegistrations(regs);
             setStats(st);
+            setDispatches(disp);
+            setResources(res);
+            // Mark already-dispatched IDs
+            const ids = new Set();
+            disp.forEach(d => {
+                if (d.type === 'rescue') ids.add(d.reported_by + '-rescue');
+                else ids.add(d.reported_by + '-medical');
+            });
         } catch { }
     };
 
@@ -398,8 +421,38 @@ export default function Coordinator() {
         return () => clearInterval(interval);
     }, []);
 
-    const handleDispatched = (id) => {
+    const handleDispatched = async (id) => {
         setDispatchedIds(prev => new Set(prev).add(id));
+        const ismedical = id.startsWith('med-');
+        const realId = ismedical ? id.replace('med-', '') : id;
+        const report = registrations.find(r => r.id === realId);
+        if (report) {
+            try {
+                await createDispatch({
+                    type: ismedical ? 'medical' : 'rescue',
+                    camp_name: report.camp,
+                    team_member_name: '',
+                    dispatch_location: report.village || report.camp,
+                    dispatch_reason: ismedical ? (report.injuryDescription || 'Medical emergency') : (report.trappedDescription || 'Trapped person'),
+                    reported_by: report.name,
+                });
+                const [disp, res] = await Promise.all([fetchDispatches(), fetchResources()]);
+                setDispatches(disp);
+                setResources(res);
+            } catch { }
+        }
+    };
+
+    const filterDispatches = (type, dateFilter) => {
+        let entries = dispatches.filter(d => d.type === type);
+        if (dateFilter === 'TODAY') {
+            const today = new Date().toDateString();
+            entries = entries.filter(d => new Date(d.dispatch_time).toDateString() === today);
+        } else if (dateFilter === 'LAST_24H') {
+            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+            entries = entries.filter(d => new Date(d.dispatch_time).getTime() > cutoff);
+        }
+        return entries;
     };
 
     // If viewing a specific camp
@@ -411,64 +464,66 @@ export default function Coordinator() {
     const campStats = stats.campStats || {};
 
     const resourceByCamp = {};
-    CAMPS.forEach(c => { resourceByCamp[c] = { FOOD: 0, WATER: 0, MEDICINE: 0, SHELTER: 0 }; });
+    CAMPS.forEach(c => { resourceByCamp[c] = { FOOD: 0, WATER: 0, MEDICINE: 0 }; });
     registrations.forEach(r => {
-        if (resourceByCamp[r.camp]) r.needs?.forEach(n => { resourceByCamp[r.camp][n] = (resourceByCamp[r.camp][n] || 0) + 1; });
+        if (resourceByCamp[r.camp]) r.needs?.forEach(n => {
+            const upper = n.toUpperCase();
+            if (upper.includes('FOOD')) resourceByCamp[r.camp].FOOD++;
+            if (upper.includes('WATER')) resourceByCamp[r.camp].WATER++;
+            if (upper.includes('MEDICINE')) resourceByCamp[r.camp].MEDICINE++;
+        });
     });
 
-    const suggestions = [];
-    const allNeeds = ['FOOD', 'WATER', 'MEDICINE', 'SHELTER'];
-    allNeeds.forEach(need => {
-        const withN = CAMPS.filter(c => resourceByCamp[c][need] > 0);
-        const without = CAMPS.filter(c => resourceByCamp[c][need] === 0 && campStats[c]?.count > 0);
-        if (withN.length > 0 && without.length > 0) {
-            const heaviest = withN.sort((a, b) => resourceByCamp[b][need] - resourceByCamp[a][need])[0];
-            without.forEach(from => suggestions.push({ need, from, to: heaviest, count: resourceByCamp[heaviest][need] }));
-        }
-    });
+    const allNeeds = ['FOOD', 'WATER', 'MEDICINE'];
 
     function getCampColor(camp) {
         const s = campStats[camp];
-        if (!s || !s.lastTime) return 'bg-slate-700';
+        if (!s || !s.lastTime) return 'bg-hud-400';
         const mins = (Date.now() - new Date(s.lastTime).getTime()) / 60000;
-        if (mins < 30) return 'bg-green-600';
-        if (mins < 60) return 'bg-yellow-500';
-        return 'bg-red-600';
+        if (mins < 30) return 'bg-status-green';
+        if (mins < 60) return 'bg-warn-amber';
+        return 'bg-alert-red';
     }
 
     const liveFeed = [...registrations].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 20);
-    const priorityColors = ['🔴', '🟠', '🟡'];
+    const priorityLabels = ['P1', 'P2', 'P3'];
+    const priorityColors = ['border-alert-red/40 bg-alert-red-dim', 'border-warn-orange/40 bg-warn-orange-dim', 'border-warn-amber/40 bg-warn-amber-dim'];
 
-    // Collect all rescue-worthy reports for dispatch buttons
     const medicalReports = registrations.filter(r => r.injured && r.injuryDescription);
 
     return (
-        <div className="min-h-screen bg-navy-900 text-white dark-scrollbar">
+        <div className="min-h-screen bg-hud-black hud-grid text-hud-white hud-scrollbar">
             {showClearModal && <ClearModal registrations={registrations} onClose={() => setShowClearModal(false)} onDeleted={load} />}
             {showReportModal && <ReportModal registrations={registrations} onClose={() => setShowReportModal(false)} />}
             {rescueTarget && <RescueModal report={rescueTarget} onClose={() => setRescueTarget(null)} onDispatched={handleDispatched} />}
 
             {/* Top Bar */}
-            <div className="bg-navy-800 border-b border-slate-700 px-4 sm:px-6 py-3 flex items-center justify-between">
-                <Link to="/" className="text-slate-400 hover:text-white font-medium transition-colors">← Home</Link>
-                <h1 className="text-lg font-bold">Relief<span className="text-red-400">Link</span> <span className="text-slate-400 font-normal">Coordinator</span></h1>
+            <div className="border-b border-hud-500 px-4 sm:px-6 py-3 flex items-center justify-between bg-hud-900">
+                <Link to="/" className="font-mono text-xs text-hud-300 hover:text-neon-cyan transition-colors tracking-wider uppercase">← Home</Link>
+                <h1 className="font-mono text-xs text-hud-white tracking-wider uppercase">
+                    RELIEF<span className="text-neon-cyan">LINK</span> // <span className="text-hud-400">COORDINATOR</span>
+                </h1>
                 <div className="flex items-center gap-2">
-                    <button onClick={() => setShowReportModal(true)} className="px-3 py-1.5 text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors">📄 Report</button>
-                    <button onClick={() => setShowClearModal(true)} className="px-3 py-1.5 text-xs font-semibold bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors">🗑️ Clear</button>
+                    <button onClick={() => setShowReportModal(true)} className="px-3 py-1.5 font-mono text-[10px] font-bold tracking-wider uppercase border border-hud-500 hover:border-neon-cyan text-hud-300 hover:text-neon-cyan transition-colors">
+                        📄 REPORT
+                    </button>
+                    <button onClick={() => setShowClearModal(true)} className="px-3 py-1.5 font-mono text-[10px] font-bold tracking-wider uppercase border border-alert-red/40 hover:border-alert-red text-alert-red/70 hover:text-alert-red transition-colors">
+                        🗑️ CLEAR
+                    </button>
                 </div>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 sm:p-6">
                 {[
-                    { label: 'Total Survivors', value: stats.totalSurvivors, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
-                    { label: 'Camps Active', value: stats.activeCamps, color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' },
-                    { label: 'Rescue Alerts', value: stats.trappedCount, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
-                    { label: 'Medical Emergencies', value: stats.medicalCount, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+                    { label: 'TOTAL_SURVIVORS', value: stats.totalSurvivors, color: 'text-alert-red' },
+                    { label: 'CAMPS_ACTIVE', value: stats.activeCamps, color: 'text-neon-cyan' },
+                    { label: 'RESCUE_ALERTS', value: stats.trappedCount, color: 'text-warn-orange' },
+                    { label: 'MEDICAL_EMERGENCIES', value: stats.medicalCount, color: 'text-alert-red' },
                 ].map(stat => (
-                    <div key={stat.label} className={`${stat.bg} border rounded-xl p-4`}>
-                        <p className="text-xs text-slate-400 uppercase tracking-wider font-medium">{stat.label}</p>
-                        <p className={`text-3xl font-extrabold ${stat.color} mt-1`}>{stat.value}</p>
+                    <div key={stat.label} className="border border-hud-500 bg-hud-900 p-4">
+                        <p className="mono-label">{stat.label}</p>
+                        <p className={`font-mono text-3xl sm:text-4xl font-bold ${stat.color} mt-1`}>{stat.value}</p>
                     </div>
                 ))}
             </div>
@@ -476,43 +531,45 @@ export default function Coordinator() {
             {/* Panels */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6 pt-0 sm:pt-0">
                 {/* Panel 1: Rescue Priorities */}
-                <div className="bg-navy-800 border border-slate-700 rounded-xl p-5">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <span className="w-3 h-3 bg-red-500 rounded-full animate-status-pulse"></span> Rescue Priorities
+                <div className="border border-hud-500 bg-hud-900 p-5 min-h-[500px]">
+                    <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-alert-red animate-status-pulse" /> RESCUE_PRIORITIES
                     </h2>
                     {rescueClusters.length === 0 ? (
-                        <p className="text-slate-500 text-sm">No trapped person reports</p>
+                        <p className="font-mono text-xs text-hud-400">No trapped person reports</p>
                     ) : (
-                        <div className="space-y-3 max-h-[400px] overflow-y-auto dark-scrollbar pr-1">
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto hud-scrollbar pr-1">
                             {rescueClusters.map((cluster, i) => (
-                                <div key={i} className={`rounded-lg p-4 border ${i === 0 ? 'bg-red-500/10 border-red-500/30' : i === 1 ? 'bg-orange-500/10 border-orange-500/30' : 'bg-yellow-500/10 border-yellow-500/30'
-                                    }`}>
+                                <div key={i} className={`p-4 border ${priorityColors[Math.min(i, 2)]}`}>
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-lg">{priorityColors[Math.min(i, 2)]}</span>
-                                        <span className="font-bold text-sm uppercase tracking-wider">Priority {i + 1}</span>
-                                        <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full ml-auto">{cluster.count} report{cluster.count > 1 ? 's' : ''}</span>
+                                        <span className="font-mono text-[10px] font-bold tracking-widest text-hud-white bg-hud-600 px-2 py-0.5">
+                                            {priorityLabels[Math.min(i, 2)]}
+                                        </span>
+                                        <span className="font-mono text-[10px] text-hud-400 ml-auto tracking-wider">
+                                            [{cluster.count} REPORT{cluster.count > 1 ? 'S' : ''}]
+                                        </span>
                                     </div>
-                                    <p className="text-sm font-semibold text-slate-300 mb-2 capitalize">{cluster.label}</p>
+                                    <p className="font-mono text-xs font-semibold text-hud-200 mb-2 capitalize">{cluster.label}</p>
                                     <div className="space-y-2">
                                         {cluster.reports.map(r => (
-                                            <div key={r.id} className="text-xs text-slate-400 bg-white/5 rounded-lg p-3">
+                                            <div key={r.id} className="font-mono text-[10px] text-hud-400 bg-hud-800 border border-hud-500 p-3">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="flex-1">
-                                                        <span className="text-slate-300 font-medium">{r.name}</span>
-                                                        <span className="text-slate-500 mx-1">•</span>
-                                                        <span className="text-slate-500">{r.camp}</span>
-                                                        <p className="mt-1 text-slate-400">"{r.trappedDescription}"</p>
+                                                        <span className="text-hud-200 font-medium">{r.name}</span>
+                                                        <span className="text-hud-500 mx-1">•</span>
+                                                        <span className="text-hud-400">{r.camp}</span>
+                                                        <p className="mt-1 text-hud-300">"{r.trappedDescription}"</p>
                                                     </div>
                                                     {dispatchedIds.has(r.id) ? (
-                                                        <span className="shrink-0 px-3 py-1.5 text-xs font-bold bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg">
-                                                            ✓ Dispatched
+                                                        <span className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-status-green-dim text-status-green border border-status-green/30 tracking-wider">
+                                                            ✓ DISPATCHED
                                                         </span>
                                                     ) : (
                                                         <button
                                                             onClick={() => setRescueTarget(r)}
-                                                            className="shrink-0 px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-lg transition-all shadow-sm"
+                                                            className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
                                                         >
-                                                            🚁 Send Rescue
+                                                            🚁 SEND RESCUE
                                                         </button>
                                                     )}
                                                 </div>
@@ -522,34 +579,34 @@ export default function Coordinator() {
                                 </div>
                             ))}
 
-                            {/* Medical emergencies with dispatch */}
+                            {/* Medical emergencies */}
                             {medicalReports.length > 0 && (
-                                <div className="rounded-lg p-4 border bg-red-500/10 border-red-500/30">
+                                <div className="p-4 border border-alert-red/40 bg-alert-red-dim">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-lg">🏥</span>
-                                        <span className="font-bold text-sm uppercase tracking-wider">Medical Emergencies</span>
-                                        <span className="text-xs bg-white/10 px-2 py-0.5 rounded-full ml-auto">{medicalReports.length}</span>
+                                        <span className="font-mono text-[10px] font-bold tracking-widest text-hud-white bg-alert-red px-2 py-0.5">MED</span>
+                                        <span className="font-display text-xs font-bold uppercase tracking-wider">Medical Emergencies</span>
+                                        <span className="font-mono text-[10px] text-hud-400 ml-auto tracking-wider">[{medicalReports.length}]</span>
                                     </div>
                                     <div className="space-y-2">
                                         {medicalReports.map(r => (
-                                            <div key={`med-${r.id}`} className="text-xs text-slate-400 bg-white/5 rounded-lg p-3">
+                                            <div key={`med-${r.id}`} className="font-mono text-[10px] text-hud-400 bg-hud-800 border border-hud-500 p-3">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="flex-1">
-                                                        <span className="text-slate-300 font-medium">{r.name}</span>
-                                                        <span className="text-slate-500 mx-1">•</span>
-                                                        <span className="text-slate-500">{r.camp}</span>
-                                                        <p className="mt-1 text-red-300">🚨 {r.injuryDescription}</p>
+                                                        <span className="text-hud-200 font-medium">{r.name}</span>
+                                                        <span className="text-hud-500 mx-1">•</span>
+                                                        <span className="text-hud-400">{r.camp}</span>
+                                                        <p className="mt-1 text-alert-red">🚨 {r.injuryDescription}</p>
                                                     </div>
                                                     {dispatchedIds.has(`med-${r.id}`) ? (
-                                                        <span className="shrink-0 px-3 py-1.5 text-xs font-bold bg-green-600/20 text-green-400 border border-green-500/30 rounded-lg">
-                                                            ✓ Dispatched
+                                                        <span className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-status-green-dim text-status-green border border-status-green/30 tracking-wider">
+                                                            ✓ DISPATCHED
                                                         </span>
                                                     ) : (
                                                         <button
                                                             onClick={() => setRescueTarget({ ...r, id: `med-${r.id}` })}
-                                                            className="shrink-0 px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white rounded-lg transition-all shadow-sm"
+                                                            className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
                                                         >
-                                                            🏥 Send Medical
+                                                            🏥 SEND MEDICAL
                                                         </button>
                                                     )}
                                                 </div>
@@ -563,53 +620,90 @@ export default function Coordinator() {
                 </div>
 
                 {/* Panel 2: Resource Matching */}
-                <div className="bg-navy-800 border border-slate-700 rounded-xl p-5">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span className="text-xl">📦</span> Resource Matching</h2>
-                    <div className="overflow-x-auto mb-4">
-                        <table className="w-full text-sm">
+                <div className="border border-hud-500 bg-hud-900 p-5 min-h-[500px]">
+                    <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="text-base">📦</span> RESOURCE_MATCHING
+                    </h2>
+
+                    {/* Resource Allocation Summary from DB */}
+                    <div className="mb-4">
+                        <p className="mono-label mb-3">RESOURCE_ALLOCATION_SUMMARY</p>
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                            {['FOOD', 'WATER', 'MEDICINE'].map(need => {
+                                const key = need.toLowerCase();
+                                const totalAvail = resources.reduce((s, r) => s + (r[`${key}_total`] || 0), 0);
+                                const totalAlloc = resources.reduce((s, r) => s + (r[`${key}_allocated`] || 0), 0);
+                                const remaining = totalAvail - totalAlloc;
+                                return (
+                                    <div key={need} className="border border-hud-500 bg-hud-800 p-3">
+                                        <p className="font-mono text-[10px] text-hud-400 tracking-wider font-bold mb-2">
+                                            {need === 'FOOD' ? '🍚' : need === 'WATER' ? '💧' : '💊'} {need}
+                                        </p>
+                                        <div className="space-y-1.5">
+                                            <div className="flex justify-between">
+                                                <span className="font-mono text-[9px] text-hud-400">TOTAL</span>
+                                                <span className="font-mono text-xs font-bold text-hud-200">{totalAvail}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="font-mono text-[9px] text-hud-400">ALLOC</span>
+                                                <span className="font-mono text-xs font-bold text-neon-cyan">{totalAlloc}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="font-mono text-[9px] text-hud-400">REM</span>
+                                                <span className={`font-mono text-xs font-bold ${remaining > 30 ? 'text-status-green' : remaining > 0 ? 'text-warn-amber' : 'text-alert-red'}`}>{remaining}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Per-Camp Allocation from DB */}
+                    <p className="mono-label mb-2">ALLOCATION_PER_CAMP</p>
+                    <div className="overflow-x-auto">
+                        <table className="w-full font-mono text-xs">
                             <thead>
-                                <tr className="text-slate-400 text-xs uppercase tracking-wider border-b border-slate-700">
-                                    <th className="pb-2 text-left font-medium">Camp</th>
-                                    <th className="pb-2 text-center font-medium">Food</th>
-                                    <th className="pb-2 text-center font-medium">Water</th>
-                                    <th className="pb-2 text-center font-medium">Med</th>
-                                    <th className="pb-2 text-center font-medium">Shelter</th>
+                                <tr className="text-hud-400 text-[10px] uppercase tracking-widest border-b border-hud-500">
+                                    <th className="pb-2 text-left font-medium">CAMP</th>
+                                    <th className="pb-2 text-center font-medium">FOOD</th>
+                                    <th className="pb-2 text-center font-medium">WATER</th>
+                                    <th className="pb-2 text-center font-medium">MED</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {CAMPS.map(camp => {
-                                    const needs = resourceByCamp[camp];
+                                {resources.map(r => {
+                                    const campLabel = (r.camp_name || '').replace(' Camp', '').replace(' Relief', '');
                                     return (
-                                        <tr key={camp} className="border-b border-slate-700/50">
-                                            <td className="py-2 text-slate-300 text-xs font-medium max-w-[120px] truncate">{camp.replace(' Camp', '').replace(' Relief', '')}</td>
-                                            {allNeeds.map(n => (
-                                                <td key={n} className="py-2 text-center">
-                                                    {needs[n] > 0 ? <span className="bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 rounded-full font-bold">{needs[n]}</span> : <span className="text-slate-600">—</span>}
-                                                </td>
-                                            ))}
+                                        <tr key={r.camp_id} className="border-b border-hud-500/50">
+                                            <td className="py-2 text-hud-200 text-[10px] font-medium max-w-[100px] truncate">{campLabel}</td>
+                                            {['food', 'water', 'medicine'].map(k => {
+                                                const total = r[`${k}_total`] || 0;
+                                                const alloc = r[`${k}_allocated`] || 0;
+                                                const rem = total - alloc;
+                                                return (
+                                                    <td key={k} className="py-2 text-center">
+                                                        <div className="font-mono text-[10px]">
+                                                            <span className={`px-1.5 py-0.5 font-bold border ${rem > 20 ? 'bg-status-green-dim text-status-green border-status-green/30' : rem > 0 ? 'bg-warn-amber-dim text-warn-amber border-warn-amber/30' : 'bg-alert-red-dim text-alert-red border-alert-red/30'}`}>
+                                                                {alloc}/{total}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                );
+                                            })}
                                         </tr>
                                     );
                                 })}
                             </tbody>
                         </table>
                     </div>
-                    {suggestions.length > 0 && (
-                        <div className="space-y-2">
-                            <p className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-2">Redistribution Suggestions</p>
-                            {suggestions.slice(0, 4).map((s, i) => (
-                                <div key={i} className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 text-xs">
-                                    <span className="text-orange-400 font-medium">💡</span> <span className="text-white font-bold">{s.need}</span>{' '}
-                                    <span className="text-slate-400">from</span> <span className="text-slate-200">{s.from.replace(' Camp', '')}</span>{' '}
-                                    <span className="text-slate-400">→</span> <span className="text-slate-200">{s.to.replace(' Camp', '')}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
 
-                {/* Panel 3: Camp Status — CLICKABLE */}
-                <div className="bg-navy-800 border border-slate-700 rounded-xl p-5">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><span className="text-xl">🏕️</span> Camp Status</h2>
+                {/* Panel 3: Camp Status */}
+                <div className="border border-hud-500 bg-hud-900 p-5">
+                    <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="text-base">🏕️</span> CAMP_STATUS
+                    </h2>
                     <div className="space-y-2">
                         {CAMPS.map(camp => {
                             const s = campStats[camp] || {};
@@ -618,18 +712,18 @@ export default function Coordinator() {
                                 <button
                                     key={camp}
                                     onClick={() => setSelectedCampView(camp)}
-                                    className="w-full bg-white/5 hover:bg-white/10 rounded-lg p-3 flex items-center gap-3 text-left transition-colors group"
+                                    className="w-full bg-hud-800 hover:bg-hud-700 border border-hud-500 hover:border-neon-cyan p-3 flex items-center gap-3 text-left transition-all group"
                                 >
-                                    <div className={`w-3 h-3 ${color} rounded-full shrink-0`}></div>
+                                    <div className={`w-2.5 h-2.5 ${color} shrink-0`} />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">{camp}</p>
-                                        <div className="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
-                                            <span>{s.count || 0} registered</span>
+                                        <p className="font-mono text-xs font-semibold text-hud-200 truncate group-hover:text-neon-cyan transition-colors">{camp}</p>
+                                        <div className="flex items-center gap-3 font-mono text-[10px] text-hud-400 mt-0.5 tracking-wider">
+                                            <span>[{s.count || 0} registered]</span>
                                             {s.lastTime && <span>Last: {timeAgo(s.lastTime)}</span>}
-                                            {s.medicalEmergencies > 0 && <span className="text-red-400 font-medium">🚨 {s.medicalEmergencies} medical</span>}
+                                            {s.medicalEmergencies > 0 && <span className="text-alert-red font-medium">🚨 {s.medicalEmergencies} medical</span>}
                                         </div>
                                     </div>
-                                    <span className="text-slate-600 group-hover:text-orange-400 transition-colors text-sm">→</span>
+                                    <span className="text-hud-500 group-hover:text-neon-cyan transition-colors font-mono text-xs">→</span>
                                 </button>
                             );
                         })}
@@ -637,30 +731,113 @@ export default function Coordinator() {
                 </div>
 
                 {/* Panel 4: Live Feed */}
-                <div className="bg-navy-800 border border-slate-700 rounded-xl p-5">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                        <span className="w-3 h-3 bg-green-500 rounded-full animate-status-pulse"></span> Live Feed
+                <div className="border border-hud-500 bg-hud-900 p-5">
+                    <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-status-green animate-status-pulse" /> LIVE_FEED
                     </h2>
-                    <div className="space-y-1.5 max-h-[400px] overflow-y-auto dark-scrollbar pr-1">
-                        {liveFeed.length === 0 ? <p className="text-slate-500 text-sm">No registrations yet</p> : liveFeed.map(r => {
+                    <div className="space-y-1.5 max-h-[400px] overflow-y-auto hud-scrollbar pr-1">
+                        {liveFeed.length === 0 ? <p className="font-mono text-xs text-hud-400">No registrations yet</p> : liveFeed.map(r => {
                             const isMedical = r.injured && r.injuryDescription;
                             const isTrapped = r.trapped;
                             return (
-                                <div key={r.id} className={`rounded-lg p-3 text-xs ${isMedical ? 'bg-red-500/10 border border-red-500/20' : isTrapped ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-white/5'}`}>
+                                <div key={r.id} className={`p-3 font-mono text-[10px] border ${isMedical ? 'bg-alert-red-dim border-alert-red/20' : isTrapped ? 'bg-warn-orange-dim border-warn-orange/20' : 'bg-hud-800 border-hud-500/50'}`}>
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-slate-500 font-mono">{formatTime(r.timestamp)}</span>
-                                        <span className="font-semibold text-slate-200">{r.name}</span>
-                                        <span className="text-slate-500">•</span>
-                                        <span className="text-slate-400">{r.village}</span>
-                                        <span className="text-slate-500">•</span>
-                                        <span className="text-slate-400 truncate max-w-[120px]">{r.camp.replace(' Camp', '')}</span>
-                                        {r.needs?.length > 0 && <><span className="text-slate-500">•</span><span className="text-amber-400">{r.needs.join(', ')}</span></>}
-                                        {isMedical && <span className="text-red-400 font-bold ml-auto">🚨 MEDICAL</span>}
-                                        {isTrapped && <span className="text-orange-400 font-bold ml-auto">⚠️ TRAPPED</span>}
+                                        <span className="text-hud-400">{formatTime(r.timestamp)}</span>
+                                        <span className="font-semibold text-hud-200">{r.name}</span>
+                                        <span className="text-hud-500">•</span>
+                                        <span className="text-hud-400">{r.village}</span>
+                                        <span className="text-hud-500">•</span>
+                                        <span className="text-hud-400 truncate max-w-[120px]">{r.camp.replace(' Camp', '')}</span>
+                                        {r.needs?.length > 0 && <><span className="text-hud-500">•</span><span className="text-warn-amber">{r.needs.join(', ')}</span></>}
+                                        {isMedical && <span className="text-alert-red font-bold ml-auto">🚨 MEDICAL</span>}
+                                        {isTrapped && <span className="text-warn-orange font-bold ml-auto">⚠️ TRAPPED</span>}
                                     </div>
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            </div>
+
+            {/* Dispatch History Panels */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 sm:p-6 pt-0 sm:pt-0">
+                {/* Panel 5: Rescue Team Dispatched */}
+                <div className="border border-hud-500 bg-hud-900 p-5">
+                    <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="text-base">🚁</span> RESCUE_TEAM_DISPATCHED
+                        <span className="font-mono text-[10px] text-hud-400 ml-auto tracking-wider">[{dispatches.filter(d => d.type === 'rescue').length}]</span>
+                    </h2>
+                    <div className="flex gap-2 mb-3 flex-wrap">
+                        <select value={rescueDateFilter} onChange={e => setRescueDateFilter(e.target.value)}
+                            className="px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider hud-input bg-hud-800 border-hud-500">
+                            <option value="ALL_TIME">ALL TIME</option>
+                            <option value="TODAY">TODAY</option>
+                            <option value="LAST_24H">LAST 24H</option>
+                        </select>
+                    </div>
+                    <div className="space-y-2 max-h-[350px] overflow-y-auto hud-scrollbar pr-1">
+                        {filterDispatches('rescue', rescueDateFilter).length === 0 ? (
+                            <p className="font-mono text-xs text-hud-400 text-center py-6">No rescue teams dispatched yet</p>
+                        ) : filterDispatches('rescue', rescueDateFilter).map(d => (
+                            <div key={d.id} className="bg-hud-800 border border-hud-500 p-3 font-mono text-[10px]">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-neon-cyan">RSC-{String(d.id).padStart(3, '0')}</span>
+                                        <span className="text-hud-500">•</span>
+                                        <span className="text-hud-200">{d.reported_by}</span>
+                                    </div>
+                                    <span className={`shrink-0 px-2 py-1 font-bold tracking-wider border ${d.status === 'Dispatched' ? 'bg-status-green-dim text-status-green border-status-green/30' : 'bg-warn-amber-dim text-warn-amber border-warn-amber/30'}`}>
+                                        {d.status === 'Dispatched' ? '✓' : '⏳'} {d.status}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-hud-400">
+                                    <div><span className="text-hud-500">LOC:</span> <span className="text-hud-200">{d.dispatch_location}</span></div>
+                                    <div><span className="text-hud-500">CAMP:</span> <span className="text-hud-200">{(d.camp_name || '').replace(' Camp', '')}</span></div>
+                                    <div className="col-span-2"><span className="text-hud-500">REASON:</span> <span className="text-hud-300">{d.dispatch_reason}</span></div>
+                                    <div><span className="text-hud-500">TIME:</span> <span className="text-hud-200">{formatFullTime(d.dispatch_time)}</span></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Panel 6: Medical Team Dispatched */}
+                <div className="border border-hud-500 bg-hud-900 p-5">
+                    <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <span className="text-base">🏥</span> MEDICAL_TEAM_DISPATCHED
+                        <span className="font-mono text-[10px] text-hud-400 ml-auto tracking-wider">[{dispatches.filter(d => d.type === 'medical').length}]</span>
+                    </h2>
+                    <div className="flex gap-2 mb-3 flex-wrap">
+                        <select value={medicalDateFilter} onChange={e => setMedicalDateFilter(e.target.value)}
+                            className="px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wider hud-input bg-hud-800 border-hud-500">
+                            <option value="ALL_TIME">ALL TIME</option>
+                            <option value="TODAY">TODAY</option>
+                            <option value="LAST_24H">LAST 24H</option>
+                        </select>
+                    </div>
+                    <div className="space-y-2 max-h-[350px] overflow-y-auto hud-scrollbar pr-1">
+                        {filterDispatches('medical', medicalDateFilter).length === 0 ? (
+                            <p className="font-mono text-xs text-hud-400 text-center py-6">No medical teams dispatched yet</p>
+                        ) : filterDispatches('medical', medicalDateFilter).map(d => (
+                            <div key={d.id} className="bg-hud-800 border border-hud-500 p-3 font-mono text-[10px]">
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-alert-red">MED-{String(d.id).padStart(3, '0')}</span>
+                                        <span className="text-hud-500">•</span>
+                                        <span className="text-hud-200">{d.reported_by}</span>
+                                    </div>
+                                    <span className={`shrink-0 px-2 py-1 font-bold tracking-wider border ${d.status === 'Dispatched' ? 'bg-status-green-dim text-status-green border-status-green/30' : 'bg-warn-amber-dim text-warn-amber border-warn-amber/30'}`}>
+                                        {d.status === 'Dispatched' ? '✓' : '⏳'} {d.status}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-hud-400">
+                                    <div><span className="text-hud-500">LOC:</span> <span className="text-hud-200">{d.dispatch_location}</span></div>
+                                    <div><span className="text-hud-500">CAMP:</span> <span className="text-hud-200">{(d.camp_name || '').replace(' Camp', '')}</span></div>
+                                    <div className="col-span-2"><span className="text-hud-500">REASON:</span> <span className="text-alert-red">🚨 {d.dispatch_reason}</span></div>
+                                    <div><span className="text-hud-500">TIME:</span> <span className="text-hud-200">{formatFullTime(d.dispatch_time)}</span></div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
