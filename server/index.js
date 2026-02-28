@@ -1,12 +1,34 @@
 import express from 'express';
 import cors from 'cors';
-import { getDb } from './db.js';
+import crypto from 'crypto';
+import { getDb, hashPassword } from './db.js';
 
 const app = express();
 const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// ---- Session store ----
+const sessions = new Map(); // token -> { username, createdAt }
+
+function generateToken() {
+    return crypto.randomBytes(32).toString('hex');
+}
+
+function authMiddleware(req, res, next) {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    const token = header.slice(7);
+    const session = sessions.get(token);
+    if (!session) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    req.adminUser = session.username;
+    next();
+}
 
 // --- Helper ---
 function generateId() {
@@ -28,6 +50,8 @@ function rowToJson(row) {
         trappedDescription: row.trapped_description,
         needs: JSON.parse(row.needs || '[]'),
         timestamp: row.timestamp,
+        rescueDispatched: !!row.rescue_dispatched,
+        medicalDispatched: !!row.medical_dispatched,
     };
 }
 
@@ -131,6 +155,31 @@ app.get('/api/stats', (req, res) => {
         };
     });
 
+    // Add resource and dispatch data per camp
+    const campResources = db.prepare(`
+        SELECT c.name, cr.food_total, cr.food_allocated, cr.water_total, cr.water_allocated,
+               cr.medicine_total, cr.medicine_allocated
+        FROM camps c LEFT JOIN camp_resources cr ON cr.camp_id = c.id
+    `).all();
+    campResources.forEach(cr => {
+        if (!campStats[cr.name]) campStats[cr.name] = { count: 0, lastTime: null, medicalEmergencies: 0 };
+        campStats[cr.name].foodRemaining = (cr.food_total || 0) - (cr.food_allocated || 0);
+        campStats[cr.name].waterRemaining = (cr.water_total || 0) - (cr.water_allocated || 0);
+        campStats[cr.name].medicineRemaining = (cr.medicine_total || 0) - (cr.medicine_allocated || 0);
+    });
+
+    const campDispatches = db.prepare(`
+        SELECT c.name, d.type, COUNT(*) as cnt
+        FROM dispatch_log d JOIN camps c ON c.id = d.camp_id
+        WHERE d.status = 'Dispatched'
+        GROUP BY c.name, d.type
+    `).all();
+    campDispatches.forEach(d => {
+        if (!campStats[d.name]) campStats[d.name] = { count: 0, lastTime: null, medicalEmergencies: 0 };
+        if (d.type === 'rescue') campStats[d.name].activeRescue = d.cnt;
+        if (d.type === 'medical') campStats[d.name].activeMedical = d.cnt;
+    });
+
     res.json({
         totalSurvivors,
         totalRegistrations,
@@ -222,11 +271,59 @@ app.delete('/api/registrations', (req, res) => {
     res.json({ deleted: result.changes });
 });
 
+// PUT /api/registrations/:id/dispatch — mark as dispatched (one type only)
+app.put('/api/registrations/:id/dispatch', (req, res) => {
+    const db = getDb();
+    const { id } = req.params;
+    const { type } = req.body; // 'rescue' or 'medical'
+
+    if (!type || !['rescue', 'medical'].includes(type)) {
+        return res.status(400).json({ error: 'type must be "rescue" or "medical"' });
+    }
+
+    const reg = db.prepare('SELECT * FROM registrations WHERE id = ?').get(id);
+    if (!reg) return res.status(404).json({ error: 'Registration not found' });
+
+    // Only update the specific dispatch column for this row
+    const column = type === 'rescue' ? 'rescue_dispatched' : 'medical_dispatched';
+    db.prepare(`UPDATE registrations SET ${column} = 1 WHERE id = ?`).run(id);
+    res.json({ success: true, id, type, [column]: 1 });
+});
+
+// ============================
+// AUTH ROUTES
+// ============================
+
+// POST /api/auth/login — authenticate admin
+app.post('/api/auth/login', (req, res) => {
+    const db = getDb();
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const admin = db.prepare('SELECT * FROM admins WHERE username = ?').get(username);
+    if (!admin) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const inputHash = hashPassword(password);
+    if (inputHash !== admin.password_hash) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = generateToken();
+    sessions.set(token, { username: admin.username, createdAt: Date.now() });
+
+    res.json({ token, username: admin.username });
+});
+
 // ============================
 // CAMPS & ADMIN ROUTES
 // ============================
 
-// GET /api/camps — list all camps with team counts
+// GET /api/camps — list all camps with team counts (public — needed by kiosk)
 app.get('/api/camps', (req, res) => {
     const db = getDb();
     const rows = db.prepare(`
@@ -239,15 +336,23 @@ app.get('/api/camps', (req, res) => {
     res.json(rows);
 });
 
-// POST /api/camps — create a new camp
-app.post('/api/camps', (req, res) => {
+// POST /api/camps — create a new camp (protected)
+app.post('/api/camps', authMiddleware, (req, res) => {
     const db = getDb();
     const { name, medical_team_count, rescue_team_count } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Camp name is required' });
 
+    const trimmedName = name.trim();
+
+    // Explicit case-insensitive duplicate check
+    const existing = db.prepare('SELECT id FROM camps WHERE LOWER(TRIM(name)) = LOWER(?)').get(trimmedName);
+    if (existing) {
+        return res.status(409).json({ error: 'Camp name already exists' });
+    }
+
     try {
         const result = db.prepare('INSERT INTO camps (name, medical_team_count, rescue_team_count) VALUES (?, ?, ?)').run(
-            name.trim(), medical_team_count || 3, rescue_team_count || 3
+            trimmedName, medical_team_count || 3, rescue_team_count || 3
         );
         const campId = result.lastInsertRowid;
         db.prepare('INSERT INTO camp_resources (camp_id) VALUES (?)').run(campId);
@@ -263,8 +368,8 @@ app.post('/api/camps', (req, res) => {
     }
 });
 
-// PUT /api/camps/:id — update camp settings
-app.put('/api/camps/:id', (req, res) => {
+// PUT /api/camps/:id — update camp settings (protected)
+app.put('/api/camps/:id', authMiddleware, (req, res) => {
     const db = getDb();
     const { id } = req.params;
     const { medical_team_count, rescue_team_count, food_total, water_total, medicine_total } = req.body;
@@ -371,5 +476,7 @@ app.listen(PORT, () => {
     console.log(`   PUT    /api/camps/:id`);
     console.log(`   GET    /api/resources`);
     console.log(`   GET    /api/dispatches`);
-    console.log(`   POST   /api/dispatches\n`);
+    console.log(`   POST   /api/dispatches`);
+    console.log(`   PUT    /api/registrations/:id/dispatch`);
+    console.log(`   POST   /api/auth/login\n`);
 });

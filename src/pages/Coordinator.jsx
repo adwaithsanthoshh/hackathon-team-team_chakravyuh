@@ -1,14 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchRegistrations, fetchStats, deleteRegistrations, fetchDispatches, createDispatch, fetchResources } from '../utils/api';
-
-const CAMPS = [
-    'Meppadi Relief Camp',
-    'Chooralmala School Camp',
-    'Kalpetta Government Camp',
-    'Mananthavady Town Camp',
-    'Sulthan Bathery Camp',
-];
+import { fetchRegistrations, fetchStats, deleteRegistrations, fetchDispatches, createDispatch, fetchResources, markDispatched, fetchCamps } from '../utils/api';
 
 const STOPWORDS = new Set([
     'the', 'a', 'an', 'is', 'in', 'at', 'to', 'of', 'and', 'or', 'my',
@@ -26,7 +18,7 @@ function tokenize(text) {
 }
 
 function clusterTrappedReports(registrations) {
-    const trapped = registrations.filter(r => r.trapped && r.trappedDescription);
+    const trapped = registrations.filter(r => r.trapped && r.trappedDescription && !r.rescueDispatched);
     if (trapped.length === 0) return [];
     const reports = trapped.map(r => ({ ...r, tokens: tokenize(r.trappedDescription) }));
     const used = new Set();
@@ -152,7 +144,7 @@ function CampDetailView({ campName, registrations, onBack }) {
 // ============================
 // CLEAR DATABASE MODAL
 // ============================
-function ClearModal({ registrations, onClose, onDeleted }) {
+function ClearModal({ registrations, camps, onClose, onDeleted }) {
     const [selectedCamp, setSelectedCamp] = useState('');
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [deleting, setDeleting] = useState(false);
@@ -190,7 +182,7 @@ function ClearModal({ registrations, onClose, onDeleted }) {
                     <select value={selectedCamp} onChange={e => { setSelectedCamp(e.target.value); setSelectedIds(new Set()); }}
                         className="w-full p-3 hud-input">
                         <option value="">— CHOOSE A CAMP —</option>
-                        {CAMPS.map(c => <option key={c} value={c}>{c} ({registrations.filter(r => r.camp === c).length} entries)</option>)}
+                        {camps.map(c => <option key={c} value={c}>{c} ({registrations.filter(r => r.camp === c).length} entries)</option>)}
                     </select>
                 </div>
                 <div className="flex-1 overflow-y-auto hud-scrollbar p-5">
@@ -240,11 +232,11 @@ function ClearModal({ registrations, onClose, onDeleted }) {
 // ============================
 // DOWNLOAD REPORT MODAL
 // ============================
-function ReportModal({ registrations, onClose }) {
+function ReportModal({ registrations, camps, onClose }) {
     const [selectedCamps, setSelectedCamps] = useState(new Set());
 
     const toggleCamp = (camp) => { setSelectedCamps(prev => { const n = new Set(prev); n.has(camp) ? n.delete(camp) : n.add(camp); return n; }); };
-    const toggleAll = () => { setSelectedCamps(selectedCamps.size === CAMPS.length ? new Set() : new Set(CAMPS)); };
+    const toggleAll = () => { setSelectedCamps(selectedCamps.size === camps.length ? new Set() : new Set(camps)); };
 
     const handleDownload = () => {
         if (selectedCamps.size === 0) return;
@@ -284,11 +276,11 @@ function ReportModal({ registrations, onClose }) {
                     <div className="flex items-center justify-between mb-3">
                         <span className="mono-label">SELECT_CAMPS</span>
                         <button onClick={toggleAll} className="font-mono text-[10px] font-bold text-neon-cyan hover:text-neon-cyan/80 transition-colors tracking-wider uppercase">
-                            {selectedCamps.size === CAMPS.length ? 'DESELECT ALL' : 'SELECT ALL'}
+                            {selectedCamps.size === camps.length ? 'DESELECT ALL' : 'SELECT ALL'}
                         </button>
                     </div>
                     <div className="space-y-2">
-                        {CAMPS.map(camp => (
+                        {camps.map(camp => (
                             <label key={camp} className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border ${selectedCamps.has(camp) ? 'bg-neon-cyan-dim border-neon-cyan/30' : 'bg-hud-800 border-hud-500 hover:border-hud-400'}`}>
                                 <input type="checkbox" checked={selectedCamps.has(camp)} onChange={() => toggleCamp(camp)} className="w-4 h-4 accent-cyan-400" />
                                 <span className="font-mono text-xs text-hud-white font-medium flex-1">{camp}</span>
@@ -391,27 +383,22 @@ export default function Coordinator() {
     const [showReportModal, setShowReportModal] = useState(false);
     const [selectedCampView, setSelectedCampView] = useState(null);
     const [rescueTarget, setRescueTarget] = useState(null);
-    const [dispatchedIds, setDispatchedIds] = useState(new Set());
     const [dispatches, setDispatches] = useState([]);
     const [resources, setResources] = useState([]);
+    const [campNames, setCampNames] = useState([]);
     const [rescueDateFilter, setRescueDateFilter] = useState('ALL_TIME');
     const [medicalDateFilter, setMedicalDateFilter] = useState('ALL_TIME');
 
     const load = async () => {
         try {
-            const [regs, st, disp, res] = await Promise.all([
-                fetchRegistrations(), fetchStats(), fetchDispatches(), fetchResources()
+            const [regs, st, disp, res, campData] = await Promise.all([
+                fetchRegistrations(), fetchStats(), fetchDispatches(), fetchResources(), fetchCamps()
             ]);
             setRegistrations(regs);
             setStats(st);
             setDispatches(disp);
             setResources(res);
-            // Mark already-dispatched IDs
-            const ids = new Set();
-            disp.forEach(d => {
-                if (d.type === 'rescue') ids.add(d.reported_by + '-rescue');
-                else ids.add(d.reported_by + '-medical');
-            });
+            setCampNames(campData.map(c => c.name));
         } catch { }
     };
 
@@ -422,12 +409,14 @@ export default function Coordinator() {
     }, []);
 
     const handleDispatched = async (id) => {
-        setDispatchedIds(prev => new Set(prev).add(id));
         const ismedical = id.startsWith('med-');
         const realId = ismedical ? id.replace('med-', '') : id;
         const report = registrations.find(r => r.id === realId);
         if (report) {
             try {
+                // Mark as dispatched in DB (persistent)
+                await markDispatched(realId, ismedical ? 'medical' : 'rescue');
+                // Create dispatch log entry
                 await createDispatch({
                     type: ismedical ? 'medical' : 'rescue',
                     camp_name: report.camp,
@@ -436,9 +425,8 @@ export default function Coordinator() {
                     dispatch_reason: ismedical ? (report.injuryDescription || 'Medical emergency') : (report.trappedDescription || 'Trapped person'),
                     reported_by: report.name,
                 });
-                const [disp, res] = await Promise.all([fetchDispatches(), fetchResources()]);
-                setDispatches(disp);
-                setResources(res);
+                // Reload all data
+                await load();
             } catch { }
         }
     };
@@ -464,7 +452,7 @@ export default function Coordinator() {
     const campStats = stats.campStats || {};
 
     const resourceByCamp = {};
-    CAMPS.forEach(c => { resourceByCamp[c] = { FOOD: 0, WATER: 0, MEDICINE: 0 }; });
+    campNames.forEach(c => { resourceByCamp[c] = { FOOD: 0, WATER: 0, MEDICINE: 0 }; });
     registrations.forEach(r => {
         if (resourceByCamp[r.camp]) r.needs?.forEach(n => {
             const upper = n.toUpperCase();
@@ -489,12 +477,12 @@ export default function Coordinator() {
     const priorityLabels = ['P1', 'P2', 'P3'];
     const priorityColors = ['border-alert-red/40 bg-alert-red-dim', 'border-warn-orange/40 bg-warn-orange-dim', 'border-warn-amber/40 bg-warn-amber-dim'];
 
-    const medicalReports = registrations.filter(r => r.injured && r.injuryDescription);
+    const medicalReports = registrations.filter(r => r.injured && r.injuryDescription && !r.medicalDispatched);
 
     return (
         <div className="min-h-screen bg-hud-black hud-grid text-hud-white hud-scrollbar">
-            {showClearModal && <ClearModal registrations={registrations} onClose={() => setShowClearModal(false)} onDeleted={load} />}
-            {showReportModal && <ReportModal registrations={registrations} onClose={() => setShowReportModal(false)} />}
+            {showClearModal && <ClearModal registrations={registrations} camps={campNames} onClose={() => setShowClearModal(false)} onDeleted={load} />}
+            {showReportModal && <ReportModal registrations={registrations} camps={campNames} onClose={() => setShowReportModal(false)} />}
             {rescueTarget && <RescueModal report={rescueTarget} onClose={() => setRescueTarget(null)} onDispatched={handleDispatched} />}
 
             {/* Top Bar */}
@@ -535,7 +523,7 @@ export default function Coordinator() {
                     <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 bg-alert-red animate-status-pulse" /> RESCUE_PRIORITIES
                     </h2>
-                    {rescueClusters.length === 0 ? (
+                    {rescueClusters.length === 0 && medicalReports.length === 0 ? (
                         <p className="font-mono text-xs text-hud-400">No trapped person reports</p>
                     ) : (
                         <div className="space-y-3 max-h-[400px] overflow-y-auto hud-scrollbar pr-1">
@@ -560,18 +548,12 @@ export default function Coordinator() {
                                                         <span className="text-hud-400">{r.camp}</span>
                                                         <p className="mt-1 text-hud-300">"{r.trappedDescription}"</p>
                                                     </div>
-                                                    {dispatchedIds.has(r.id) ? (
-                                                        <span className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-status-green-dim text-status-green border border-status-green/30 tracking-wider">
-                                                            ✓ DISPATCHED
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => setRescueTarget(r)}
-                                                            className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
-                                                        >
-                                                            🚁 SEND RESCUE
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => setRescueTarget(r)}
+                                                        className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
+                                                    >
+                                                        🚁 SEND RESCUE
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -579,7 +561,7 @@ export default function Coordinator() {
                                 </div>
                             ))}
 
-                            {/* Medical emergencies */}
+                            {/* Medical emergencies — rendered independently of rescue clusters */}
                             {medicalReports.length > 0 && (
                                 <div className="p-4 border border-alert-red/40 bg-alert-red-dim">
                                     <div className="flex items-center gap-2 mb-2">
@@ -597,18 +579,12 @@ export default function Coordinator() {
                                                         <span className="text-hud-400">{r.camp}</span>
                                                         <p className="mt-1 text-alert-red">🚨 {r.injuryDescription}</p>
                                                     </div>
-                                                    {dispatchedIds.has(`med-${r.id}`) ? (
-                                                        <span className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-status-green-dim text-status-green border border-status-green/30 tracking-wider">
-                                                            ✓ DISPATCHED
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => setRescueTarget({ ...r, id: `med-${r.id}` })}
-                                                            className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
-                                                        >
-                                                            🏥 SEND MEDICAL
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => setRescueTarget({ ...r, id: `med-${r.id}` })}
+                                                        className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
+                                                    >
+                                                        🏥 SEND MEDICAL
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -705,7 +681,7 @@ export default function Coordinator() {
                         <span className="text-base">🏕️</span> CAMP_STATUS
                     </h2>
                     <div className="space-y-2">
-                        {CAMPS.map(camp => {
+                        {campNames.map(camp => {
                             const s = campStats[camp] || {};
                             const color = getCampColor(camp);
                             return (
@@ -717,10 +693,23 @@ export default function Coordinator() {
                                     <div className={`w-2.5 h-2.5 ${color} shrink-0`} />
                                     <div className="flex-1 min-w-0">
                                         <p className="font-mono text-xs font-semibold text-hud-200 truncate group-hover:text-neon-cyan transition-colors">{camp}</p>
-                                        <div className="flex items-center gap-3 font-mono text-[10px] text-hud-400 mt-0.5 tracking-wider">
+                                        <div className="flex items-center gap-3 font-mono text-[10px] text-hud-400 mt-0.5 tracking-wider flex-wrap">
                                             <span>[{s.count || 0} registered]</span>
                                             {s.lastTime && <span>Last: {timeAgo(s.lastTime)}</span>}
                                             {s.medicalEmergencies > 0 && <span className="text-alert-red font-medium">🚨 {s.medicalEmergencies} medical</span>}
+                                        </div>
+                                        <div className="flex items-center gap-3 font-mono text-[10px] mt-1 tracking-wider flex-wrap">
+                                            {s.foodRemaining !== undefined && (
+                                                <span className={s.foodRemaining > 20 ? 'text-status-green' : s.foodRemaining > 0 ? 'text-warn-amber' : 'text-alert-red'}>🍚 {s.foodRemaining}</span>
+                                            )}
+                                            {s.waterRemaining !== undefined && (
+                                                <span className={s.waterRemaining > 20 ? 'text-status-green' : s.waterRemaining > 0 ? 'text-warn-amber' : 'text-alert-red'}>💧 {s.waterRemaining}</span>
+                                            )}
+                                            {s.medicineRemaining !== undefined && (
+                                                <span className={s.medicineRemaining > 20 ? 'text-status-green' : s.medicineRemaining > 0 ? 'text-warn-amber' : 'text-alert-red'}>💊 {s.medicineRemaining}</span>
+                                            )}
+                                            {(s.activeRescue || 0) > 0 && <span className="text-warn-orange font-medium">🚁 {s.activeRescue} rescue</span>}
+                                            {(s.activeMedical || 0) > 0 && <span className="text-alert-red font-medium">🏥 {s.activeMedical} medical</span>}
                                         </div>
                                     </div>
                                     <span className="text-hud-500 group-hover:text-neon-cyan transition-colors font-mono text-xs">→</span>

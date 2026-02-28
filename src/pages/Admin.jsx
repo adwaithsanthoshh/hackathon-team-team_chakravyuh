@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchCamps, createCamp, updateCamp } from '../utils/api';
+import { fetchCamps, createCamp, updateCamp, loginAdmin } from '../utils/api';
 
 export default function Admin() {
-    const [authed, setAuthed] = useState(() => sessionStorage.getItem('admin_auth') === 'true');
+    const [authed, setAuthed] = useState(() => !!sessionStorage.getItem('admin_token'));
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loginError, setLoginError] = useState('');
+    const [loggingIn, setLoggingIn] = useState(false);
 
     const [camps, setCamps] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -24,19 +25,23 @@ export default function Admin() {
 
     useEffect(() => { if (authed) loadCamps(); }, [authed]);
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
-        if (username === 'admin' && password === 'admin') {
-            sessionStorage.setItem('admin_auth', 'true');
+        setLoggingIn(true);
+        setLoginError('');
+        try {
+            const { token } = await loginAdmin(username, password);
+            sessionStorage.setItem('admin_token', token);
             setAuthed(true);
-            setLoginError('');
-        } else {
-            setLoginError('Invalid credentials');
+        } catch (err) {
+            setLoginError(err.message || 'Invalid credentials');
+        } finally {
+            setLoggingIn(false);
         }
     };
 
     const handleLogout = () => {
-        sessionStorage.removeItem('admin_auth');
+        sessionStorage.removeItem('admin_token');
         setAuthed(false);
     };
 
@@ -50,7 +55,16 @@ export default function Admin() {
             await loadCamps();
             setSaveMsg('Camp added successfully');
             setTimeout(() => setSaveMsg(''), 3000);
-        } catch (err) { alert('Failed to add camp. It may already exist.'); }
+        } catch (err) {
+            const msg = err.message || 'Failed to add camp';
+            if (msg.includes('Authentication') || msg.includes('expired') || msg.includes('token')) {
+                alert('Session expired. Please log in again.');
+                sessionStorage.removeItem('admin_token');
+                setAuthed(false);
+            } else {
+                alert(msg);
+            }
+        }
         finally { setSaving(false); }
     };
 
@@ -68,7 +82,16 @@ export default function Admin() {
             await loadCamps();
             setSaveMsg('Camp updated successfully');
             setTimeout(() => setSaveMsg(''), 3000);
-        } catch { alert('Failed to save changes.'); }
+        } catch (err) {
+            const msg = err.message || 'Failed to save changes';
+            if (msg.includes('Authentication') || msg.includes('expired') || msg.includes('token')) {
+                alert('Session expired. Please log in again.');
+                sessionStorage.removeItem('admin_token');
+                setAuthed(false);
+            } else {
+                alert(msg);
+            }
+        }
         finally { setSaving(false); }
     };
 
@@ -105,8 +128,8 @@ export default function Admin() {
                         {loginError && (
                             <p className="font-mono text-[10px] text-alert-red tracking-wider">⚠ {loginError.toUpperCase()}</p>
                         )}
-                        <button type="submit" className="w-full py-4 btn-primary text-sm tracking-wider">
-                            🔓 AUTHENTICATE
+                        <button type="submit" disabled={loggingIn} className="w-full py-4 btn-primary text-sm tracking-wider">
+                            {loggingIn ? '⏳ AUTHENTICATING...' : '🔓 AUTHENTICATE'}
                         </button>
                     </form>
 

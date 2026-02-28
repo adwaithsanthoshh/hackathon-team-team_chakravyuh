@@ -1,20 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { createRegistration, fetchStats } from '../utils/api';
-
-const CAMPS = [
-    'Meppadi Relief Camp',
-    'Chooralmala School Camp',
-    'Kalpetta Government Camp',
-    'Mananthavady Town Camp',
-    'Sulthan Bathery Camp',
-];
+import { createRegistration, fetchStats, fetchCamps } from '../utils/api';
 
 const NEED_OPTIONS = ['FOOD', 'WATER', 'MEDICINE', 'OTHER'];
 const NEED_ICONS = { FOOD: '🍚', WATER: '💧', MEDICINE: '💊', OTHER: '✏️' };
 const CAMP_STORAGE_KEY = 'relieflink_selected_camp';
 
 export default function Kiosk() {
+    const [camps, setCamps] = useState([]);
     const [camp, setCamp] = useState('');
     const [step, setStep] = useState('camp');
     const [regCount, setRegCount] = useState(0);
@@ -36,6 +29,7 @@ export default function Kiosk() {
         const saved = localStorage.getItem(CAMP_STORAGE_KEY);
         if (saved) setCamp(saved);
         fetchStats().then(data => setRegCount(data.totalRegistrations)).catch(() => { });
+        fetchCamps().then(data => setCamps(data.map(c => c.name))).catch(() => { });
     }, []);
 
     const handleCampSelect = () => {
@@ -121,7 +115,7 @@ export default function Kiosk() {
                             className="w-full text-base p-4 hud-input appearance-none"
                         >
                             <option value="">— SELECT A CAMP —</option>
-                            {CAMPS.map(c => <option key={c} value={c}>{c}</option>)}
+                            {camps.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
 
                         <button
