@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchCamps, createCamp, updateCamp, loginAdmin } from '../utils/api';
+import { fetchCamps, createCamp, updateCamp, deleteCamp, loginAdmin } from '../utils/api';
 
 export default function Admin() {
     const [authed, setAuthed] = useState(() => !!sessionStorage.getItem('admin_token'));
@@ -97,6 +97,31 @@ export default function Admin() {
 
     const updateEditField = (field, value) => {
         setEditingCamp(prev => ({ ...prev, [field]: Math.max(0, parseInt(value) || 0) }));
+    };
+
+    const handleDeleteCamp = async (camp) => {
+        const confirmed = window.confirm(
+            `⚠️ DELETE "${camp.name}"?\n\nThis will permanently delete:\n• All registrations for this camp\n• Camp resources\n• All dispatch records\n• The camp itself\n\nThis action CANNOT be undone.`
+        );
+        if (!confirmed) return;
+
+        setSaving(true);
+        try {
+            await deleteCamp(camp.id);
+            await loadCamps();
+            setSaveMsg(`Camp "${camp.name}" deleted successfully`);
+            setTimeout(() => setSaveMsg(''), 3000);
+        } catch (err) {
+            const msg = err.message || 'Failed to delete camp';
+            if (msg.includes('Authentication') || msg.includes('expired') || msg.includes('token')) {
+                alert('Session expired. Please log in again.');
+                sessionStorage.removeItem('admin_token');
+                setAuthed(false);
+            } else {
+                alert(msg);
+            }
+        }
+        finally { setSaving(false); }
     };
 
     // ========== LOGIN SCREEN ==========
@@ -213,10 +238,16 @@ export default function Admin() {
                                             <span className="font-mono text-[10px] text-hud-400 tracking-wider">ID:{camp.id}</span>
                                         </div>
                                         {!isEditing ? (
-                                            <button onClick={() => setEditingCamp({ ...camp })}
-                                                className="px-3 py-1.5 font-mono text-[10px] font-bold tracking-wider uppercase border border-hud-500 hover:border-neon-cyan text-hud-300 hover:text-neon-cyan transition-colors">
-                                                ✏️ EDIT
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setEditingCamp({ ...camp })}
+                                                    className="px-3 py-1.5 font-mono text-[10px] font-bold tracking-wider uppercase border border-hud-500 hover:border-neon-cyan text-hud-300 hover:text-neon-cyan transition-colors">
+                                                    ✏️ EDIT
+                                                </button>
+                                                <button onClick={() => handleDeleteCamp(camp)} disabled={saving}
+                                                    className="px-3 py-1.5 font-mono text-[10px] font-bold tracking-wider uppercase border border-alert-red/40 hover:border-alert-red text-alert-red/60 hover:text-alert-red transition-colors">
+                                                    🗑️ DELETE
+                                                </button>
+                                            </div>
                                         ) : (
                                             <div className="flex gap-2">
                                                 <button onClick={() => handleSaveCamp(editingCamp)} disabled={saving}

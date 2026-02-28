@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchRegistrations, fetchStats, deleteRegistrations, fetchDispatches, createDispatch, fetchResources, markDispatched, fetchCamps } from '../utils/api';
+import { fetchRegistrations, fetchStats, deleteRegistrations, fetchDispatches, createDispatch, fetchResources, markDispatched, fetchCamps, aiSortPriorities } from '../utils/api';
+import AIChatbot from '../components/AIChatbot';
 
 const STOPWORDS = new Set([
     'the', 'a', 'an', 'is', 'in', 'at', 'to', 'of', 'and', 'or', 'my',
@@ -388,6 +389,8 @@ export default function Coordinator() {
     const [campNames, setCampNames] = useState([]);
     const [rescueDateFilter, setRescueDateFilter] = useState('ALL_TIME');
     const [medicalDateFilter, setMedicalDateFilter] = useState('ALL_TIME');
+    const [aiPriority, setAiPriority] = useState({}); // id -> { priority, reason }
+    const [aiSorting, setAiSorting] = useState(false);
 
     const load = async () => {
         try {
@@ -407,6 +410,23 @@ export default function Coordinator() {
         const interval = setInterval(load, 5000);
         return () => clearInterval(interval);
     }, []);
+
+    // AI priority sorting — non-blocking, background call
+    useEffect(() => {
+        const cases = registrations.filter(r => (r.trapped && !r.rescueDispatched) || (r.injured && !r.medicalDispatched));
+        if (cases.length === 0) { setAiPriority({}); return; }
+
+        let cancelled = false;
+        setAiSorting(true);
+        aiSortPriorities(cases).then(result => {
+            if (cancelled || !result?.sorted) return;
+            const map = {};
+            result.sorted.forEach(s => { map[s.id] = { priority: s.priority, reason: s.reason }; });
+            setAiPriority(map);
+        }).catch(() => { }).finally(() => { if (!cancelled) setAiSorting(false); });
+
+        return () => { cancelled = true; };
+    }, [registrations]);
 
     const handleDispatched = async (id) => {
         const ismedical = id.startsWith('med-');
@@ -477,6 +497,15 @@ export default function Coordinator() {
     const priorityLabels = ['P1', 'P2', 'P3'];
     const priorityColors = ['border-alert-red/40 bg-alert-red-dim', 'border-warn-orange/40 bg-warn-orange-dim', 'border-warn-amber/40 bg-warn-amber-dim'];
 
+    // AI priority badge helper
+    const getAiBadge = (id) => {
+        const p = aiPriority[id];
+        if (!p) return null;
+        const colors = { HIGH: 'bg-alert-red text-white', MEDIUM: 'bg-warn-orange text-white', LOW: 'bg-status-green text-white' };
+        const icons = { HIGH: '🔴', MEDIUM: '🟠', LOW: '🟢' };
+        return { color: colors[p.priority] || 'bg-hud-600 text-hud-200', icon: icons[p.priority] || '⚪', reason: p.reason, priority: p.priority };
+    };
+
     const medicalReports = registrations.filter(r => r.injured && r.injuryDescription && !r.medicalDispatched);
 
     return (
@@ -522,6 +551,8 @@ export default function Coordinator() {
                 <div className="border border-hud-500 bg-hud-900 p-5 min-h-[500px]">
                     <h2 className="font-display text-sm font-bold uppercase tracking-wider mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 bg-alert-red animate-status-pulse" /> RESCUE_PRIORITIES
+                        {aiSorting && <span className="font-mono text-[9px] text-neon-cyan animate-pulse ml-auto">🤖 AI ANALYZING...</span>}
+                        {!aiSorting && Object.keys(aiPriority).length > 0 && <span className="font-mono text-[9px] text-neon-cyan/60 ml-auto">🤖 AI SORTED</span>}
                     </h2>
                     {rescueClusters.length === 0 && medicalReports.length === 0 ? (
                         <p className="font-mono text-xs text-hud-400">No trapped person reports</p>
@@ -539,24 +570,31 @@ export default function Coordinator() {
                                     </div>
                                     <p className="font-mono text-xs font-semibold text-hud-200 mb-2 capitalize">{cluster.label}</p>
                                     <div className="space-y-2">
-                                        {cluster.reports.map(r => (
-                                            <div key={r.id} className="font-mono text-[10px] text-hud-400 bg-hud-800 border border-hud-500 p-3">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="flex-1">
-                                                        <span className="text-hud-200 font-medium">{r.name}</span>
-                                                        <span className="text-hud-500 mx-1">•</span>
-                                                        <span className="text-hud-400">{r.camp}</span>
-                                                        <p className="mt-1 text-hud-300">"{r.trappedDescription}"</p>
+                                        {cluster.reports.map(r => {
+                                            const badge = getAiBadge(r.id);
+                                            return (
+                                                <div key={r.id} className="font-mono text-[10px] text-hud-400 bg-hud-800 border border-hud-500 p-3">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {badge && <span className={`inline-block px-1.5 py-0.5 text-[8px] font-bold tracking-wider ${badge.color}`} style={{ borderRadius: '3px' }}>{badge.icon} {badge.priority}</span>}
+                                                                <span className="text-hud-200 font-medium">{r.name}</span>
+                                                                <span className="text-hud-500">•</span>
+                                                                <span className="text-hud-400">{r.camp}</span>
+                                                            </div>
+                                                            <p className="mt-1 text-hud-300">"{r.trappedDescription}"</p>
+                                                            {badge?.reason && <p className="mt-0.5 text-[9px] text-neon-cyan/50 italic">AI: {badge.reason}</p>}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setRescueTarget(r)}
+                                                            className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
+                                                        >
+                                                            🚁 SEND RESCUE
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        onClick={() => setRescueTarget(r)}
-                                                        className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
-                                                    >
-                                                        🚁 SEND RESCUE
-                                                    </button>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ))}
@@ -570,24 +608,31 @@ export default function Coordinator() {
                                         <span className="font-mono text-[10px] text-hud-400 ml-auto tracking-wider">[{medicalReports.length}]</span>
                                     </div>
                                     <div className="space-y-2">
-                                        {medicalReports.map(r => (
-                                            <div key={`med-${r.id}`} className="font-mono text-[10px] text-hud-400 bg-hud-800 border border-hud-500 p-3">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div className="flex-1">
-                                                        <span className="text-hud-200 font-medium">{r.name}</span>
-                                                        <span className="text-hud-500 mx-1">•</span>
-                                                        <span className="text-hud-400">{r.camp}</span>
-                                                        <p className="mt-1 text-alert-red">🚨 {r.injuryDescription}</p>
+                                        {medicalReports.map(r => {
+                                            const badge = getAiBadge(r.id);
+                                            return (
+                                                <div key={`med-${r.id}`} className="font-mono text-[10px] text-hud-400 bg-hud-800 border border-hud-500 p-3">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {badge && <span className={`inline-block px-1.5 py-0.5 text-[8px] font-bold tracking-wider ${badge.color}`} style={{ borderRadius: '3px' }}>{badge.icon} {badge.priority}</span>}
+                                                                <span className="text-hud-200 font-medium">{r.name}</span>
+                                                                <span className="text-hud-500">•</span>
+                                                                <span className="text-hud-400">{r.camp}</span>
+                                                            </div>
+                                                            <p className="mt-1 text-alert-red">🚨 {r.injuryDescription}</p>
+                                                            {badge?.reason && <p className="mt-0.5 text-[9px] text-neon-cyan/50 italic">AI: {badge.reason}</p>}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setRescueTarget({ ...r, id: `med-${r.id}` })}
+                                                            className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
+                                                        >
+                                                            🏥 SEND MEDICAL
+                                                        </button>
                                                     </div>
-                                                    <button
-                                                        onClick={() => setRescueTarget({ ...r, id: `med-${r.id}` })}
-                                                        className="shrink-0 px-3 py-1.5 font-mono text-[10px] font-bold bg-alert-red hover:bg-alert-red/80 text-hud-white border border-alert-red transition-colors tracking-wider"
-                                                    >
-                                                        🏥 SEND MEDICAL
-                                                    </button>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -830,6 +875,7 @@ export default function Coordinator() {
                     </div>
                 </div>
             </div>
+            <AIChatbot />
         </div>
     );
 }

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
 import { getDb, hashPassword } from './db.js';
+import { sortByPriority, chatWithContext, isConfigured } from './groq.js';
 
 const app = express();
 const PORT = 3001;
@@ -403,6 +404,34 @@ app.put('/api/camps/:id', authMiddleware, (req, res) => {
     res.json(updated);
 });
 
+// DELETE /api/camps/:id — delete camp and ALL related data (protected)
+app.delete('/api/camps/:id', authMiddleware, (req, res) => {
+    const db = getDb();
+    const { id } = req.params;
+
+    const camp = db.prepare('SELECT * FROM camps WHERE id = ?').get(id);
+    if (!camp) return res.status(404).json({ error: 'Camp not found' });
+
+    // Transaction: delete all related data then the camp itself
+    const deleteCampTransaction = db.transaction(() => {
+        // 1. Delete registrations referencing this camp by name
+        db.prepare('DELETE FROM registrations WHERE camp = ?').run(camp.name);
+        // 2. Delete camp_resources (also handled by CASCADE)
+        db.prepare('DELETE FROM camp_resources WHERE camp_id = ?').run(id);
+        // 3. Delete dispatch_log (also handled by CASCADE)
+        db.prepare('DELETE FROM dispatch_log WHERE camp_id = ?').run(id);
+        // 4. Delete the camp itself
+        db.prepare('DELETE FROM camps WHERE id = ?').run(id);
+    });
+
+    try {
+        deleteCampTransaction();
+        res.json({ success: true, deleted: camp.name });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to delete camp: ' + e.message });
+    }
+});
+
 // GET /api/resources — all camp resources
 app.get('/api/resources', (req, res) => {
     const db = getDb();
@@ -461,10 +490,90 @@ app.post('/api/dispatches', (req, res) => {
     res.status(201).json(entry);
 });
 
+// ============================
+// AI ENDPOINTS (Groq)
+// ============================
+
+// POST /api/ai/sort-priorities — AI-based priority sorting
+app.post('/api/ai/sort-priorities', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({ error: 'AI not configured', fallback: true });
+        }
+        const { cases } = req.body;
+        if (!cases || !Array.isArray(cases)) {
+            return res.status(400).json({ error: 'cases array is required' });
+        }
+        const sorted = await sortByPriority(cases);
+        res.json({ sorted });
+    } catch (e) {
+        res.status(500).json({ error: e.message, fallback: true });
+    }
+});
+
+// POST /api/ai/chat — AI chatbot with DB context
+app.post('/api/ai/chat', async (req, res) => {
+    try {
+        if (!isConfigured()) {
+            return res.status(503).json({ error: 'AI not configured. Please add GROQ_API_KEY to .env file.' });
+        }
+        const { question } = req.body;
+        if (!question || !question.trim()) {
+            return res.status(400).json({ error: 'Question is required' });
+        }
+
+        // Build DB context for the AI
+        const db = getDb();
+        const registrations = db.prepare('SELECT * FROM registrations').all();
+        const camps = db.prepare(`
+            SELECT c.*, cr.food_total, cr.food_allocated, cr.water_total, cr.water_allocated,
+                   cr.medicine_total, cr.medicine_allocated
+            FROM camps c LEFT JOIN camp_resources cr ON cr.camp_id = c.id
+        `).all();
+        const dispatches = db.prepare(`
+            SELECT d.*, c.name as camp_name FROM dispatch_log d
+            LEFT JOIN camps c ON c.id = d.camp_id
+        `).all();
+
+        const dbContext = {
+            totalRegistrations: registrations.length,
+            totalSurvivors: registrations.reduce((s, r) => s + (r.family_count || 1), 0),
+            trappedCases: registrations.filter(r => r.trapped).length,
+            trappedPending: registrations.filter(r => r.trapped && !r.rescue_dispatched).length,
+            injuredCases: registrations.filter(r => r.injured).length,
+            injuredPending: registrations.filter(r => r.injured && !r.medical_dispatched).length,
+            camps: camps.map(c => ({
+                name: c.name,
+                registrations: registrations.filter(r => r.camp === c.name).length,
+                trapped: registrations.filter(r => r.camp === c.name && r.trapped).length,
+                injured: registrations.filter(r => r.camp === c.name && r.injured).length,
+                medicalTeam: c.medical_team_count,
+                rescueTeam: c.rescue_team_count,
+                foodRemaining: (c.food_total || 0) - (c.food_allocated || 0),
+                waterRemaining: (c.water_total || 0) - (c.water_allocated || 0),
+                medicineRemaining: (c.medicine_total || 0) - (c.medicine_allocated || 0),
+            })),
+            activeDispatches: dispatches.filter(d => d.status === 'Dispatched').length,
+            recentRegistrations: registrations.slice(0, 10).map(r => ({
+                name: r.name, camp: r.camp, village: r.village,
+                injured: !!r.injured, trapped: !!r.trapped,
+                injuryDescription: r.injury_description,
+                trappedDescription: r.trapped_description,
+            })),
+        };
+
+        const answer = await chatWithContext(question, dbContext);
+        res.json({ answer });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Start server
 app.listen(PORT, () => {
     getDb(); // Initialize DB on startup
     console.log(`\n🛟  ReliefLink API running at http://localhost:${PORT}`);
+    console.log(`   AI: ${isConfigured() ? '✅ Groq configured' : '⚠️  GROQ_API_KEY not set in .env'}`);
     console.log(`   Endpoints:`);
     console.log(`   GET    /api/registrations`);
     console.log(`   POST   /api/registrations`);
@@ -474,9 +583,12 @@ app.listen(PORT, () => {
     console.log(`   GET    /api/camps`);
     console.log(`   POST   /api/camps`);
     console.log(`   PUT    /api/camps/:id`);
+    console.log(`   DELETE /api/camps/:id`);
     console.log(`   GET    /api/resources`);
     console.log(`   GET    /api/dispatches`);
     console.log(`   POST   /api/dispatches`);
     console.log(`   PUT    /api/registrations/:id/dispatch`);
-    console.log(`   POST   /api/auth/login\n`);
+    console.log(`   POST   /api/auth/login`);
+    console.log(`   POST   /api/ai/sort-priorities`);
+    console.log(`   POST   /api/ai/chat\n`);
 });

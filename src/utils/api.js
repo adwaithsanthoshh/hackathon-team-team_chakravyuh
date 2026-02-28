@@ -123,3 +123,42 @@ export async function fetchResources() {
     if (!res.ok) throw new Error('Failed to fetch resources');
     return res.json();
 }
+
+export async function deleteCamp(id) {
+    const res = await fetch(`${API_BASE}/camps/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Failed to delete camp' }));
+        throw new Error(err.error || 'Failed to delete camp');
+    }
+    return res.json();
+}
+
+export async function aiSortPriorities(cases) {
+    const res = await fetch(`${API_BASE}/ai/sort-priorities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cases }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ fallback: true }));
+        if (err.fallback) return null; // Signal to use fallback sorting
+        throw new Error(err.error || 'AI sort failed');
+    }
+    return res.json();
+}
+
+export async function aiChat(question) {
+    const res = await fetch(`${API_BASE}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Chat failed' }));
+        throw new Error(err.error || 'Chat failed');
+    }
+    return res.json();
+}

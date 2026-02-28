@@ -69,7 +69,7 @@ function initSchema() {
       water_allocated INTEGER DEFAULT 0,
       medicine_total INTEGER DEFAULT 100,
       medicine_allocated INTEGER DEFAULT 0,
-      FOREIGN KEY (camp_id) REFERENCES camps(id)
+      FOREIGN KEY (camp_id) REFERENCES camps(id) ON DELETE CASCADE
     )
   `);
 
@@ -84,7 +84,7 @@ function initSchema() {
       dispatch_reason TEXT NOT NULL,
       reported_by TEXT DEFAULT '',
       status TEXT NOT NULL,
-      FOREIGN KEY (camp_id) REFERENCES camps(id)
+      FOREIGN KEY (camp_id) REFERENCES camps(id) ON DELETE CASCADE
     )
   `);
 
